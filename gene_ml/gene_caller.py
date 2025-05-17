@@ -4,7 +4,7 @@ from collections import namedtuple
 import numpy as np
 from numba import njit, typeof, typed, objmode
 
-from gene_ml.model_loader import ExonIntron6ClassModel
+from gene_ml.model_loader import ResidualModelBase
 
 # using dataclass would be nice, but numba doesn't support it
 GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])
@@ -126,11 +126,10 @@ def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None
 
 
 @njit
-def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str, debug=False):
+def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str, debug=False) -> int:
     """ Recursively attempt to build genes from the events list
     """
-    # if debug:
-    #     print('recurse', debug, i, len(events), len(gene))
+    num_ops = 1
 
     # handle beginning of gene
     if i == 0:
@@ -142,7 +141,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         if (not debug and len(results) >= 100
                 or debug and len(results) >= 10000):
             # limit the number of results to speed up
-            return
+            break
 
         event = events[i]
         new_gene = copy_and_append_gene_event_numba(gene, event)
@@ -152,11 +151,11 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             results.append(new_gene)
 
         if i + 1 >= len(events):
-            return  # no more additional events to consider
+            break  # no more additional events to consider
 
         # handle intron start (exon end)
         if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug or check_sequence_validity(new_gene, seq)):
-            recurse(results, events, i + 1, new_gene, seq, debug=debug)
+            num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
 
         # handle intron end (exon start)
         if gene[-1].type == EXON_END:
@@ -164,9 +163,11 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             if intron_size > MAX_INTRON_SIZE:
                 break
             if event.type == EXON_START and intron_size >= MIN_INTRON_SIZE:
-                recurse(results, events, i + 1, new_gene, seq, debug=debug)
+                num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
 
         i += 1
+
+    return num_ops
 
 
 @njit
@@ -306,8 +307,8 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, time_limit=60, debug=False) -> list[tuple[float, list[GeneEvent]]]:
-    """ for a given set of events corresponding to a candidate gene region, produce all possible gene calls"""
+def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, time_limit=6, debug=False) -> list[tuple[float, list[GeneEvent]]]:
+    """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     debug_start_pos = None  # *************** set cds start position to debug a specific gene call *****************
     # debug_start_pos = 2000
     debug2 = False
@@ -451,14 +452,12 @@ def build_coords(gene_call: list[GeneEvent], offset: int, width: int, reverse_co
         return offset+(width-gene_call[-1].pos), offset+(width-gene_call[0].pos), '-'
 
 
-def build_gene_calls(seq: str, model=None, forward_strand_only=False, preds_only=False, debug=False):
+def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> tuple[dict, dict, str, str]:
     """
     Build gene calls from a sequence using the GeneML model. Note that the coordinates in filtered_scored_gene_calls are
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
     sequence. See build_coords for converting to genomic absolute coordinates.
     """
-    if model is None:
-        model = ExonIntron6ClassModel()
 
     seq = seq.upper()
 
@@ -471,8 +470,11 @@ def build_gene_calls(seq: str, model=None, forward_strand_only=False, preds_only
         rc_seq = None
         rc_preds = None
 
-    if preds_only:
-        return None, None, preds, rc_preds
+    return preds, rc_preds, seq, rc_seq
+
+
+def build_gene_calls(preds: dict, rc_preds: dict, seq: str, rc_seq: str = None,
+                     forward_strand_only=False, debug=False):
 
     if debug:
         print('\n******************** forward strand')
@@ -535,11 +537,3 @@ def get_intron_site_sequence(seq, gene_call, debug=False) -> str:
             print(*line)
 
     return '\n'.join(' '.join(map(str, line)) for line in lines)
-
-
-def calc_largest_gene_call_length(seq: str, forward_strand_only=True):
-    filtered_scored_gene_calls, seen, preds, rc_preds = build_gene_calls(seq, forward_strand_only=forward_strand_only)
-    if not filtered_scored_gene_calls:
-        return 0
-    best_call = filtered_scored_gene_calls[0][1]
-    return best_call[-1].pos - best_call[0].pos

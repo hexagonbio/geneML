@@ -15,6 +15,7 @@ setup(
         'matplotlib>=3.5.0',
         'numpy>=1.21.0',
         'numba>=0.53.1',
+        'tqdm>=4.62.0',
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
