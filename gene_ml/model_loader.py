@@ -1,12 +1,9 @@
 import os
 import re
-from functools import cache
 
 import numpy as np
-
-from tensorflow.python.keras.models import load_model
-# from tf_keras.models import load_model
-
+from keras.src import backend
+from keras.src.saving import register_keras_serializable
 
 
 class ResidualModelBase:
@@ -17,20 +14,18 @@ class ResidualModelBase:
 
         if path is None:
             path = self.default_path
+        print(f"Loading model from {path}")
+
+        from keras.src.saving import load_model  # keras v3
+        self.model = load_model(path)
 
         filename = os.path.basename(path)
-
-        self.model = load_model(path)  #.expect_partial()
-
-        if path.endswith('.h5'):
-            # infer context length from model name
-            match = re.search(r'\d+', filename)
-            if match:
-                self.context_length = int(match.group(0))
-            else:
-                raise ValueError(f"Could not extract context length from filename: {filename}")
+        # infer context length from model name
+        match = re.search(r'\d+', filename)
+        if match:
+            self.context_length = int(match.group(0))
         else:
-            self.context_length = 800
+            raise ValueError(f"Could not extract context length from filename: {filename}")
 
     def predict(self, seq, return_dict=True):
         x = self._one_hot_encode('N'*(self.context_length//2) + seq.upper() + 'N'*(self.context_length//2))[None, :]
@@ -67,8 +62,9 @@ class ExonIntron6ClassModel(ResidualModelBase):
     Residual model with an expanded number of classes trained on genes plus some sequence context outside of genes
     """
     def specify_model_parameters(self):
-        # self.default_path = 'gs://hx-lawrence/spliceai-jobs/Models/spliceai_20210218_332g_dassei800cl_v3/SpliceAI800_c332g_dassei800cl.h5'
-        self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250515_726g_jgigenepred_v1/tf_model_ep3/'
+        # self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_215basidio_jgigenepred_v10/GeneML800_c215basidio_jgigenepred_ep10.keras'
+        # self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_308ascomycota_jgigenepred_v2/GeneML800_c308ascomycota_jgigenepred_ep10.keras'
+        self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_726g_jgigenepred_v4/GeneML800_c726g_jgigenepred_ep10.keras'
 
         self.annotations = [
             'none',
@@ -80,12 +76,15 @@ class ExonIntron6ClassModel(ResidualModelBase):
             'is_intron',
         ]
 
-        # from gene_ml.loss_functions import categorical_crossentropy_2d_gene_ml
-        # self.loss_function = categorical_crossentropy_2d_gene_ml
 
-
-
-
-@cache
-def get_cached_gene_ml_model(path=None):
-    return ExonIntron6ClassModel(path)
+@register_keras_serializable()
+def categorical_crossentropy_2d_gene_ml(y_true, y_pred):
+    # Standard categorical cross entropy for sequence outputs
+    kb = backend
+    return - kb.mean(y_true[:, :, 0]*kb.log(y_pred[:, :, 0]+1e-10)
+                     + y_true[:, :, 1]*kb.log(y_pred[:, :, 1]+1e-10)
+                     + y_true[:, :, 2]*kb.log(y_pred[:, :, 2]+1e-10)
+                     + y_true[:, :, 3]*kb.log(y_pred[:, :, 3]+1e-10)
+                     + y_true[:, :, 4]*kb.log(y_pred[:, :, 4]+1e-10)
+                     + y_true[:, :, 5]*kb.log(y_pred[:, :, 5]+1e-10)
+                     + y_true[:, :, 6]*kb.log(y_pred[:, :, 6]+1e-10))
