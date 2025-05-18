@@ -10,11 +10,11 @@ from gene_ml.outputs import build_gff_coords
 
 
 def process_contig(contig_id: str, preds: dict, rc_preds: dict, seq: str, rc_seq: str,
-                   debug=False) -> tuple[str, list[list[float | GeneEvent | bool]]]:
+                   debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str]]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
-    filtered_scored_gene_calls, seen, preds, rc_preds = build_gene_calls(preds, rc_preds, seq, rc_seq, debug=debug)
+    filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, debug=debug)
     rebuilt_results = []
     for score, gene_call, is_rc in filtered_scored_gene_calls:
         rebuilt_gene_call = []
@@ -24,7 +24,8 @@ def process_contig(contig_id: str, preds: dict, rc_preds: dict, seq: str, rc_seq
                 continue  # skip exon end if followed by cds end
             rebuilt_gene_call.append(GeneEvent(pos=event.pos, type=event.type, score=event.score))
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
-    return contig_id, rebuilt_results
+    rebuilt_logs = [str(log) for log in logs]
+    return contig_id, rebuilt_results, rebuilt_logs
 
 
 def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False, model_path=None):
@@ -44,16 +45,18 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     model = ExonIntron6ClassModel(path=model_path)
 
+    results = {}
+    all_logs = []
     if num_cores == 1:
         import time
         print('Running in single-threaded mode')
-        results = {}
         for contig_id, seq in contigs_by_size:
             print(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
             preds, rc_preds, seq, rc_seq = run_model(model, seq)
-            _, r = process_contig(contig_id, preds, rc_preds, seq, rc_seq, debug=debug)
+            _, r, logs = process_contig(contig_id, preds, rc_preds, seq, rc_seq, debug=debug)
             results[contig_id] = r
+            all_logs.extend(logs)
             end_time = time.time()
             elapsed = end_time - start_time
             print(f'Finished processing contig {contig_id} in {end_time - start_time:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
@@ -68,14 +71,14 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
                     future = pool.submit(process_contig, contig_id, preds, rc_preds, seq, rc_seq)
                     future_to_args[future] = contig_id
 
-            results = {}
             with tqdm(total=len(future_to_args)) as progress:
                 for future in as_completed(future_to_args):
                     contig_id = future_to_args[future]
                     progress.set_description(f'Gene reporting for {contig_id}', refresh=False)
                     progress.update()
 
-                    _, r = future.result()
+                    _, r, logs = future.result()
+                    all_logs.extend(logs)
                     results[contig_id] = r
 
     print('Finished processing all contigs')
@@ -96,6 +99,10 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         for gff_row in all_gff_rows:
             formatted_gff_row = '\t'.join(map(str, gff_row))
             f.write(f'{formatted_gff_row}\n')
+
+    with open(outpath + '.log', 'w') as f:
+        for log in all_logs:
+            f.write(f'{log}\n')
 
 
 def main():

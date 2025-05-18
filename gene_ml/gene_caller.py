@@ -2,7 +2,7 @@ import time
 from collections import namedtuple
 
 import numpy as np
-from numba import njit, typeof, typed, objmode
+from numba import njit, typeof, typed, objmode, types
 
 from gene_ml.model_loader import ResidualModelBase
 
@@ -138,7 +138,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         i += 1
 
     while True:
-        if (not debug and len(results) >= 100
+        if (not debug and (len(results) >= 100 or results and len(results[-1]) == 1)
                 or debug and len(results) >= 10000):
             # limit the number of results to speed up
             break
@@ -156,6 +156,11 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         # handle intron start (exon end)
         if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug or check_sequence_validity(new_gene, seq)):
             num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
+            if num_ops > 20000:
+                marker = typed.List.empty_list(GeneEventNumbaType)
+                marker.append(event)
+                results.append(marker)  # marker for too many ops
+                break
 
         # handle intron end (exon start)
         if gene[-1].type == EXON_END:
@@ -307,13 +312,16 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, time_limit=6, debug=False) -> list[tuple[float, list[GeneEvent]]]:
+def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, contig_id: str, logs: list, time_limit=5, debug=False) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     debug_start_pos = None  # *************** set cds start position to debug a specific gene call *****************
     # debug_start_pos = 2000
     debug2 = False
 
+    function_start_time = python_time()
     start_time = python_time()
+    last_end_idx = -1
+    skip_till_next_end_idx = False
     all_best_scores = []
     for start_idx in range(len(events)):
         event = events[start_idx]
@@ -331,8 +339,14 @@ def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, time_limi
             for e in events[start_idx:end_idx+1]:
                 if e.type == CDS_END:
                     cds_end_found = True
+                    if end_idx != last_end_idx:
+                        last_end_idx = end_idx
+                        start_time = python_time()
+                        skip_till_next_end_idx = False
                     break
             if not cds_end_found:
+                continue
+            if skip_till_next_end_idx:
                 continue
 
             if debug:
@@ -361,21 +375,36 @@ def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, time_limi
                         print(score_gene_call(preds, gene_call, seq, debug=True), len(gene_call), gene_call[0], gene_call[-1])
                         # print(build_cds_seq(seq, gene_call))
 
-            if not gene_calls:
-                continue
+            if gene_calls and len(gene_calls[-1]) == 1:
+                # this is a marker for too many ops
+                log = ' '.join(['too many ops for ', contig_id, str(start_idx), str(end_idx),
+                                prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
+                                prettify_gene_event(gene_calls[-1][0])])
+                print(log)
+                logs.append(log)
+                gene_calls = gene_calls[:-1]
 
-            scores = []
-            for gene_call in sorted(gene_calls, key=lambda x: len(x)):
-                scores.append((score_gene_call(preds, gene_call, seq), gene_call))
-            scores.sort(reverse=True)
+            if gene_calls:
 
-            # choose just the best... revisit?
-            all_best_scores.append(scores[0])
+                scores = []
+                for gene_call in gene_calls:
+                    scores.append((score_gene_call(preds, gene_call, seq), gene_call))
+                scores.sort(reverse=True)
 
-            if python_time() - start_time > time_limit:
-                # print('time limit exceeded')
-                break
+                # choose just the best... revisit?
+                all_best_scores.append(scores[0])
+
+            if time_limit and python_time() - start_time > time_limit:
+                log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
+                                prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
+                logs.append(log)
+                skip_till_next_end_idx = True
     all_best_scores.sort(reverse=True)
+
+    elapsed = python_time() - function_start_time
+    if elapsed > 60:
+        log = 'slow ' + contig_id + ' at ' + str(elapsed) + 's'
+        logs.append(log)
 
     return all_best_scores
 
@@ -473,7 +502,7 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
     return preds, rc_preds, seq, rc_seq
 
 
-def build_gene_calls(preds: dict, rc_preds: dict, seq: str, rc_seq: str = None,
+def build_gene_calls(preds: dict, rc_preds: dict, seq: str, rc_seq: str, contig_id: str,
                      forward_strand_only=False, debug=False):
 
     if debug:
@@ -482,13 +511,14 @@ def build_gene_calls(preds: dict, rc_preds: dict, seq: str, rc_seq: str = None,
     # for event in events:
     #     if event.type == CDS_END:
     #         print(seq[event.pos-6:event.pos+6], seq[event.pos-2:event.pos+1], event.score, event.pos)
-    scored_gene_calls = produce_gene_calls(typed.Dict(preds.items()), events, seq, debug=debug)
+    logs = typed.List.empty_list(types.unicode_type)
+    scored_gene_calls = produce_gene_calls(typed.Dict(preds.items()), events, seq, contig_id + ' forward strand', logs, debug=debug)
 
     if not forward_strand_only:
         if debug:
             print('\n******************** reverse strand')
         rc_events = get_gene_ml_events(typed.Dict(rc_preds.items()))
-        rc_scored_gene_calls = produce_gene_calls(typed.Dict(rc_preds.items()), rc_events, rc_seq, debug=debug)
+        rc_scored_gene_calls = produce_gene_calls(typed.Dict(rc_preds.items()), rc_events, rc_seq, contig_id + ' reverse strand', logs, debug=debug)
     else:
         rc_events = None
         rc_scored_gene_calls = None
@@ -514,7 +544,7 @@ def build_gene_calls(preds: dict, rc_preds: dict, seq: str, rc_seq: str = None,
     if debug and forward_strand_only and filtered_scored_gene_calls:
         get_intron_site_sequence(seq, filtered_scored_gene_calls[0][1], debug=True)
 
-    return filtered_scored_gene_calls, seen, preds, rc_preds
+    return filtered_scored_gene_calls, logs
 
 
 def get_intron_site_sequence(seq, gene_call, debug=False) -> str:
