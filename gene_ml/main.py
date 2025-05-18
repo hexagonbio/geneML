@@ -1,4 +1,5 @@
 import multiprocessing
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from Bio import SeqIO
@@ -29,6 +30,7 @@ def process_contig(contig_id: str, preds: dict, rc_preds: dict, seq: str, rc_seq
 
 
 def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False, model_path=None):
+    genome_start_time = time.time()
 
     if num_cores is None:
         num_cores = multiprocessing.cpu_count()
@@ -48,7 +50,6 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
     results = {}
     all_logs = []
     if num_cores == 1:
-        import time
         print('Running in single-threaded mode')
         for contig_id, seq in contigs_by_size:
             print(f'Processing contig {contig_id} of size {len(seq)}')
@@ -57,9 +58,8 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
             _, r, logs = process_contig(contig_id, preds, rc_preds, seq, rc_seq, debug=debug)
             results[contig_id] = r
             all_logs.extend(logs)
-            end_time = time.time()
-            elapsed = end_time - start_time
-            print(f'Finished processing contig {contig_id} in {end_time - start_time:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
+            elapsed = time.time() - start_time
+            print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
@@ -99,6 +99,11 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         for gff_row in all_gff_rows:
             formatted_gff_row = '\t'.join(map(str, gff_row))
             f.write(f'{formatted_gff_row}\n')
+
+    elapsed = time.time() - genome_start_time
+    log = f'Finished processing {path} in {elapsed/60:.2f} minutes'
+    print(log)
+    all_logs.append(log)
 
     with open(outpath + '.log', 'w') as f:
         for log in all_logs:

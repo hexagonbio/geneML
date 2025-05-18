@@ -23,13 +23,6 @@ MIN_INTRON_SIZE, MAX_INTRON_SIZE = 30, 200
 
 
 @njit
-def python_format(s, **kwargs):
-    with objmode(out='unicode_type'):
-        out = s.format(**kwargs)
-    return out
-
-
-@njit
 def python_time():
     with objmode(out='float64'):
         out = time.time()
@@ -50,9 +43,9 @@ def get_gene_ml_events(preds):
 @njit
 def get_gene_ml_events_unwrapped(cds_start: np.ndarray, cds_end: np.ndarray, exon_start: np.ndarray, exon_end: np.ndarray):
 
-    cds_starts = np.where(cds_start > 0.001)[0]
+    cds_starts = np.where(cds_start > 0.01)[0]
     cds_ends = np.where(cds_end > 0.01)[0]
-    exon_starts = np.where(exon_start > 0.001)[0]
+    exon_starts = np.where(exon_start > 0.01)[0]
     exon_ends = np.where(exon_end > 0.01)[0]
 
     events = typed.List.empty_list(GeneEventNumbaType)
@@ -138,7 +131,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         i += 1
 
     while True:
-        if (not debug and (len(results) >= 100 or results and len(results[-1]) == 1)
+        if (not debug and (len(results) >= 5 or results and len(results[-1]) == 1)
                 or debug and len(results) >= 10000):
             # limit the number of results to speed up
             break
@@ -156,7 +149,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         # handle intron start (exon end)
         if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug or check_sequence_validity(new_gene, seq)):
             num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
-            if num_ops > 20000:
+            if num_ops > 10000:
                 marker = typed.List.empty_list(GeneEventNumbaType)
                 marker.append(event)
                 results.append(marker)  # marker for too many ops
@@ -403,7 +396,8 @@ def produce_gene_calls(preds: dict, events: list[GeneEvent], seq: str, contig_id
 
     elapsed = python_time() - function_start_time
     if elapsed > 60:
-        log = 'slow ' + contig_id + ' at ' + str(elapsed) + 's'
+        with objmode(log='unicode_type'):
+            log = 'slow {contig_id} at {elapsed:.2f}s'.format(contig_id=contig_id, elapsed=elapsed)
         logs.append(log)
 
     return all_best_scores

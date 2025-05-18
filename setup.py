@@ -10,9 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'biopython>=1.78',
-        'tensorflow>=2.8.0',
-        'tf_keras>=0.1.0',
-        'matplotlib>=3.5.0',
+        'tensorflow>=2.17.0',
         'numpy>=1.21.0',
         'numba>=0.53.1',
         'tqdm>=4.62.0',
