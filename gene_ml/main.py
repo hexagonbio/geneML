@@ -12,11 +12,14 @@ from gene_ml.model_loader import get_cached_gene_ml_model
 from gene_ml.outputs import build_gff_coords
 
 
-def process_contig(contig_id: str, seq: str, model_path: str,
+def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None,
                    debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str]]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
+    tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
+    tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
+
     model = get_cached_gene_ml_model(model_path)
     preds, rc_preds, seq, rc_seq = run_model(model, seq)
     filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, debug=debug)
@@ -90,15 +93,13 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
             elapsed = time.time() - start_time
             print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
-        if len(contigs) > num_cores:
-            # if using multiprocessing, make tensorflow use only one thread within each process
-            tf.config.threading.set_inter_op_parallelism_threads(1)
-            tf.config.threading.set_intra_op_parallelism_threads(1)
+        # if using multiprocessing and sufficient number of contigs, make tensorflow use only one thread within each process
+        tensorflow_thread_count = 1 if len(contigs) > num_cores * 10 else None
 
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
             for contig_id, seq in reordered_contigs:
-                future = pool.submit(process_contig, contig_id, seq, model_path)
+                future = pool.submit(process_contig, contig_id, seq, model_path, tensorflow_thread_count)
                 future_to_args[future] = contig_id, len(seq)
 
             with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
