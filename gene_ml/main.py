@@ -1,3 +1,4 @@
+import gc
 import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -30,6 +31,14 @@ def process_contig(contig_id: str, seq: str, model_path: str,
             rebuilt_gene_call.append(GeneEvent(pos=event.pos, type=event.type, score=event.score))
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
     rebuilt_logs = [str(log) for log in logs]
+
+    # explicitly clean up memory after finishing a contig
+    del preds
+    del rc_preds
+    del filtered_scored_gene_calls
+    del logs
+    gc.collect()
+
     return contig_id, rebuilt_results, rebuilt_logs
 
 
