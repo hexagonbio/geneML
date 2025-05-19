@@ -2,21 +2,24 @@ import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import numpy as np
+import tensorflow as tf
 from Bio import SeqIO
 from tqdm import tqdm
 
 from gene_ml.gene_caller import build_gene_calls, GeneEvent, EXON_END, CDS_END, run_model
-from gene_ml.model_loader import ExonIntron6ClassModel
+from gene_ml.model_loader import get_cached_gene_ml_model
 from gene_ml.outputs import build_gff_coords
 
 
-def process_contig(contig_id: str, preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str,
+def process_contig(contig_id: str, seq: str, model_path: str,
                    debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str]]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
+    model = get_cached_gene_ml_model(model_path)
+    preds, rc_preds, seq, rc_seq = run_model(model, seq)
     filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, debug=debug)
+
     rebuilt_results = []
     for score, gene_call, is_rc in filtered_scored_gene_calls:
         rebuilt_gene_call = []
@@ -28,6 +31,25 @@ def process_contig(contig_id: str, preds: np.ndarray, rc_preds: np.ndarray, seq:
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
     rebuilt_logs = [str(log) for log in logs]
     return contig_id, rebuilt_results, rebuilt_logs
+
+
+def reorder_contigs(contigs, num_cores):
+    """
+    Reorders contigs by size to balance the workload across processes.
+    """
+    contigs_by_size = sorted(contigs.items(), key=lambda x: len(x[1]), reverse=False)
+    if len(contigs_by_size) < num_cores * 2:
+        return contigs_by_size
+
+    reordered_contigs = []
+    num_groups = max(num_cores, 8)
+    offset = len(contigs_by_size) // num_groups + 1
+    for i in range(offset):
+        for j in range(0, len(contigs_by_size), offset):
+            if j + i < len(contigs_by_size):
+                reordered_contigs.append(contigs_by_size[j + i])
+    assert len(reordered_contigs) == len(contigs_by_size), f'failed to reorder contigs, {len(reordered_contigs)} != {len(contigs_by_size)}'
+    return reordered_contigs
 
 
 def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False, model_path=None):
@@ -42,41 +64,39 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
             continue
         contigs[record.id] = str(record.seq).upper()
 
-    contigs_by_size = sorted(contigs.items(), key=lambda x: len(x[1]), reverse=False)
-    split_point = len(contigs_by_size) // 3
-    contigs_by_size = contigs_by_size[:split_point] + contigs_by_size[split_point:][::-1]
-
-    model = ExonIntron6ClassModel(path=model_path)
+    reordered_contigs = reorder_contigs(contigs, num_cores)
 
     results = {}
     all_logs = []
     if num_cores == 1:
         print('Running in single-threaded mode')
-        for contig_id, seq in contigs_by_size:
+        for contig_id, seq in reordered_contigs:
             print(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
-            preds, rc_preds, seq, rc_seq = run_model(model, seq)
-            _, r, logs = process_contig(contig_id, preds, rc_preds, seq, rc_seq, debug=debug)
+            _, r, logs = process_contig(contig_id, seq, model_path, debug=debug)
             results[contig_id] = r
             all_logs.extend(logs)
             elapsed = time.time() - start_time
             print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
+        if len(contigs) > num_cores:
+            # if using multiprocessing, make tensorflow use only one thread within each process
+            tf.config.threading.set_inter_op_parallelism_threads(1)
+            tf.config.threading.set_intra_op_parallelism_threads(1)
+
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
-            with tqdm(total=len(contigs_by_size)) as progress:
-                for contig_id, seq in contigs_by_size:
-                    progress.set_description(f'Model inference for {contig_id} ({len(seq)} bp)')
-                    progress.update()
-                    preds, rc_preds, seq, rc_seq = run_model(model, seq)
-                    future = pool.submit(process_contig, contig_id, preds, rc_preds, seq, rc_seq)
-                    future_to_args[future] = contig_id
+            genome_size = 0
+            for contig_id, seq in reordered_contigs:
+                future = pool.submit(process_contig, contig_id, seq, model_path)
+                future_to_args[future] = contig_id, len(seq)
+                genome_size += len(seq)
 
-            with tqdm(total=len(future_to_args)) as progress:
+            with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
                 for future in as_completed(future_to_args):
-                    contig_id = future_to_args[future]
-                    progress.set_description(f'Gene reporting for {contig_id}', refresh=False)
-                    progress.update()
+                    contig_id, seq_len = future_to_args[future]
+                    progress.set_description(f'Processed {contig_id} ({seq_len} bp)', refresh=False)
+                    progress.update(seq_len)
 
                     _, r, logs = future.result()
                     all_logs.extend(logs)

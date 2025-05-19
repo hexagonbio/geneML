@@ -370,7 +370,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 log = ' '.join(['too many ops for ', contig_id, str(start_idx), str(end_idx),
                                 prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
                                 prettify_gene_event(gene_calls[-1][0])])
-                print(log)
                 logs.append(log)
                 gene_calls = gene_calls[:-1]
 

@@ -1,5 +1,6 @@
 import os
 import re
+from functools import cache
 
 import numpy as np
 from keras.src import backend
@@ -21,7 +22,7 @@ class ResidualModelBase:
 
         if path is None:
             path = self.default_path
-        print(f"Loading model from {path}")
+        # print(f"Loading model from {path}")
 
         from keras.src.saving import load_model  # keras v3
         self.model = load_model(path)
@@ -82,6 +83,11 @@ class ExonIntron6ClassModel(ResidualModelBase):
             'is_exon',
             'is_intron',
         ]
+
+
+@cache
+def get_cached_gene_ml_model(model_path):
+    return ExonIntron6ClassModel(path=model_path)
 
 
 @register_keras_serializable()
