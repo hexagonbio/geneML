@@ -36,7 +36,7 @@ class ResidualModelBase:
 
     def predict(self, seq, return_dict=True):
         x = self._one_hot_encode('N'*(self.context_length//2) + seq.upper() + 'N'*(self.context_length//2))[None, :]
-        y = self.model.predict(x, verbose=0)
+        y = self.model(x, training=False).numpy()
 
         if return_dict:
             return {annot: y[0, :, i] for i, annot in enumerate(self.annotations)}
