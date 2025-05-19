@@ -6,6 +6,7 @@ from numba import njit, typeof, typed, objmode, types
 
 from gene_ml.model_loader import ResidualModelBase, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END, \
     MODEL_IS_EXON, MODEL_IS_INTRON
+from gene_ml.utils import chunked_seq_predict
 
 # using dataclass would be nice, but numba doesn't support it
 GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])
@@ -480,11 +481,11 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
 
     seq = seq.upper()
 
-    preds = model.predict(seq, return_dict=False)
+    preds = chunked_seq_predict(model, seq)
     if not forward_strand_only:
         # rc_seq = reverse_complement(seq)
         rc_seq = seq[::-1].translate(str.maketrans('ACGT', 'TGCA'))
-        rc_preds = model.predict(rc_seq, return_dict=False)
+        rc_preds = chunked_seq_predict(model, rc_seq)
     else:
         rc_seq = None
         rc_preds = None
