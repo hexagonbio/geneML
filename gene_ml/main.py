@@ -3,7 +3,6 @@ import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import tensorflow as tf
 from Bio import SeqIO
 from tqdm import tqdm
 
@@ -17,6 +16,7 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
+    import tensorflow as tf
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
