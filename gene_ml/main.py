@@ -1,5 +1,6 @@
 import gc
 import multiprocessing
+import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -157,6 +158,9 @@ def main():
         contigs_filter = args.contigs_filter.split(',')
     else:
         contigs_filter = None
+
+    # reduce tensorflow logging
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
     process_genome(args.input, args.output, contigs_filter=contigs_filter, num_cores=args.num_cores, debug=args.debug,
                    model_path=args.model)
