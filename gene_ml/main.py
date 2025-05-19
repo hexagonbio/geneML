@@ -17,6 +17,9 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
+    # reduce tensorflow logging
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
     import tensorflow as tf
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
@@ -158,9 +161,6 @@ def main():
         contigs_filter = args.contigs_filter.split(',')
     else:
         contigs_filter = None
-
-    # reduce tensorflow logging
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
     process_genome(args.input, args.output, contigs_filter=contigs_filter, num_cores=args.num_cores, debug=args.debug,
                    model_path=args.model)
