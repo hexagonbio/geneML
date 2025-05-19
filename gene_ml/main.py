@@ -68,10 +68,12 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         num_cores = multiprocessing.cpu_count()
 
     contigs = {}
+    genome_size = 0
     for record in SeqIO.parse(path, "fasta"):
         if contigs_filter is not None and record.id not in contigs_filter:
             continue
         contigs[record.id] = str(record.seq).upper()
+        genome_size += len(record.seq)
 
     reordered_contigs = reorder_contigs(contigs, num_cores)
 
@@ -95,16 +97,14 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
-            genome_size = 0
             for contig_id, seq in reordered_contigs:
                 future = pool.submit(process_contig, contig_id, seq, model_path)
                 future_to_args[future] = contig_id, len(seq)
-                genome_size += len(seq)
 
             with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
+                progress.set_description(f'Processing {path}')
                 for future in as_completed(future_to_args):
                     contig_id, seq_len = future_to_args[future]
-                    progress.set_description(f'Processed {contig_id} ({seq_len} bp)', refresh=False)
                     progress.update(seq_len)
 
                     _, r, logs = future.result()
@@ -131,7 +131,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
             f.write(f'{formatted_gff_row}\n')
 
     elapsed = time.time() - genome_start_time
-    log = f'Finished processing {path} in {elapsed/60:.2f} minutes'
+    log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
     print(log)
     all_logs.append(log)
 
