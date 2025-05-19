@@ -5,6 +5,13 @@ import numpy as np
 from keras.src import backend
 from keras.src.saving import register_keras_serializable
 
+MODEL_EXON_START = 1
+MODEL_EXON_END = 2
+MODEL_CDS_START = 3
+MODEL_CDS_END = 4
+MODEL_IS_EXON = 5
+MODEL_IS_INTRON = 6
+
 
 class ResidualModelBase:
     default_path = None
@@ -34,7 +41,7 @@ class ResidualModelBase:
         if return_dict:
             return {annot: y[0, :, i] for i, annot in enumerate(self.annotations)}
         else:
-            return y
+            return y[0].T
 
     def _one_hot_encode(self, seq):
         """ version from the spliceai package """

@@ -2,6 +2,7 @@ import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import numpy as np
 from Bio import SeqIO
 from tqdm import tqdm
 
@@ -10,7 +11,7 @@ from gene_ml.model_loader import ExonIntron6ClassModel
 from gene_ml.outputs import build_gff_coords
 
 
-def process_contig(contig_id: str, preds: dict, rc_preds: dict, seq: str, rc_seq: str,
+def process_contig(contig_id: str, preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str,
                    debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str]]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
