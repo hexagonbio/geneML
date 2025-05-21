@@ -119,7 +119,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
 
-                    _, r, logs = future.result()
+                    _, r, logs, _ = future.result()
                     all_logs.extend(logs)
                     results[contig_id] = r
 
