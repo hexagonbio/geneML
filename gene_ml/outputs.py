@@ -1,4 +1,10 @@
+import numba
+import numpy as np
+from numba import njit, types, typed, objmode
+
 from gene_ml.gene_caller import GeneEvent, CDS_START, EXON_START, CDS_END, EXON_END
+from gene_ml.model_loader import MODEL_IS_EXON, MODEL_IS_INTRON, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, \
+    MODEL_EXON_END
 
 
 def get_exon_offsets(gene_call: list[GeneEvent]):
@@ -67,3 +73,44 @@ def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offs
     return gff_rows
 
 
+@njit
+def build_prediction_scores_seg(contig_id: str, preds: np.ndarray, rc_preds: np.ndarray) -> str:
+    num_bases: int = preds.shape[1]
+    assert preds.shape == rc_preds.shape, f'preds shape {preds.shape} != rc_preds shape {rc_preds.shape}'
+    lines = typed.List.empty_list(types.unicode_type)
+
+    name_to_types = {
+        'is_exon/is_intron': (MODEL_IS_EXON, MODEL_IS_INTRON),
+        'cds ends': (MODEL_CDS_START, MODEL_CDS_END),
+        'intron starts/ends': (MODEL_EXON_START, MODEL_EXON_END),
+    }
+    score_thresholds = {
+        'is_exon/is_intron': 0.2,
+        'cds ends': 0.01,
+        'intron starts/ends': 0.01,
+    }
+    strands = ['+', '-']
+    ps = [preds, rc_preds[:,::-1]]
+    for j in range(2):
+        strand = strands[j]
+        p = ps[j]
+        last_score = -100
+        last_i = -1
+        for name, (typ1, typ2) in name_to_types.items():
+            score_threshold = score_thresholds[name]
+            for i in range(num_bases):
+                score1 = p[typ1, i]
+                score2 = p[typ2, i]
+                score = round(numba.float64(score1 if score1 > score2 else -score2), 2)
+                if abs(score) < score_threshold:
+                    score = 0
+                if score != last_score:
+                    if last_i >= 0:
+                        with objmode(row="unicode_type"):
+                            cols = (name + strand, contig_id, last_i, i, last_score)
+                            row = '\t'.join(map(str, cols))
+                        lines.append(row)
+                    last_score = score
+                    last_i = i
+
+    return '\n'.join(lines)

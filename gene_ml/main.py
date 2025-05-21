@@ -9,11 +9,11 @@ from tqdm import tqdm
 
 from gene_ml.gene_caller import build_gene_calls, GeneEvent, EXON_END, CDS_END, run_model
 from gene_ml.model_loader import get_cached_gene_ml_model
-from gene_ml.outputs import build_gff_coords
+from gene_ml.outputs import build_gff_coords, build_prediction_scores_seg
 
 
-def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None,
-                   debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str]]:
+def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None, output_segs=False,
+                   debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
@@ -39,6 +39,11 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
     rebuilt_logs = [str(log) for log in logs]
 
+    if output_segs:
+        segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
+    else:
+        segs = ''
+
     # explicitly clean up memory after finishing a contig
     del preds
     del rc_preds
@@ -46,7 +51,7 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
     del logs
     gc.collect()
 
-    return contig_id, rebuilt_results, rebuilt_logs
+    return contig_id, rebuilt_results, rebuilt_logs, segs
 
 
 def reorder_contigs(contigs, num_cores):
@@ -86,14 +91,16 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     results = {}
     all_logs = []
+    all_segs = []
     if num_cores == 1:
         print('Running in single-threaded mode')
         for contig_id, seq in reordered_contigs:
             print(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
-            _, r, logs = process_contig(contig_id, seq, model_path, debug=debug)
+            _, r, logs, segs = process_contig(contig_id, seq, model_path, None, bool(contigs_filter), debug=debug)
             results[contig_id] = r
             all_logs.extend(logs)
+            all_segs.append(segs)
             elapsed = time.time() - start_time
             print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
@@ -143,6 +150,11 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
     with open(outpath + '.log', 'w') as f:
         for log in all_logs:
             f.write(f'{log}\n')
+
+    with open(outpath.replace('.gff', '') + '.seg', 'w') as f:
+        f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
+        for segs in all_segs:
+            f.write(f'{segs}\n')
 
 
 def main():
