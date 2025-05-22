@@ -91,6 +91,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     results = {}
     all_logs = []
+    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={model_path}, contigs_filter={contigs_filter}')
     all_segs = []
     if num_cores == 1:
         print('Running in single-threaded mode')

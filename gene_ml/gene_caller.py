@@ -22,7 +22,7 @@ EVENT_TYPE_MAP = (MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_E
 GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
 GeneCallNumbaType = typeof(typed.List.empty_list(GeneEventNumbaType))
 
-MIN_INTRON_SIZE, MAX_INTRON_SIZE = 30, 200
+MIN_INTRON_SIZE, MAX_INTRON_SIZE = 30, 400
 
 
 @njit
@@ -129,7 +129,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         i += 1
 
     while True:
-        if (not debug and (len(results) >= 5 or results and len(results[-1]) == 1)
+        if (not debug and (len(results) >= 100 or results and len(results[-1]) == 1)
                 or debug and len(results) >= 10000):
             # limit the number of results to speed up
             break
@@ -199,9 +199,9 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
     seq_ends_with_stop_codon = ends_with_stop_codon(cds_seq)
 
     # cds start and end, exon start and end--the more/higher the more confident we are
-    event_score = 0
-    for e in gene_call:
-        event_score += preds[EVENT_TYPE_MAP[e.type]][e.pos]
+    cds_ends_score = 0
+    for e in (gene_call[0], gene_call[-1]):
+        cds_ends_score += preds[EVENT_TYPE_MAP[e.type]][e.pos]
 
     # incorporate intron scores
     intron_score = 0
@@ -210,18 +210,14 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
             e2 = gene_call[i+1]
             if e2.type != EXON_START:
                 continue
-            if e2.pos - e.pos <= 1:
-                print('small intron')
-                for _e in gene_call:
-                    print(prettify_gene_event(_e))
-            intron_score += np.mean(preds[MODEL_IS_INTRON, e.pos+1:e2.pos]) - np.mean(preds[MODEL_IS_EXON, e.pos+1:e2.pos])
+            intron_score += np.mean(preds[MODEL_IS_INTRON, e.pos+1:e2.pos] - preds[MODEL_IS_EXON, e.pos+1:e2.pos]) - 1
 
     gene_length_score = (gene_call[-1].pos - gene_call[0].pos) / 10000  # slight preference for longer genes
 
     score = (
         mean_is_exon +
         intron_score +
-        event_score +
+        cds_ends_score +
         gene_length_score +
         (-np.inf if not cds_is_multiple_of_three else 0) +
         (-np.inf if num_stop_codons > 1 else 0) +
@@ -234,11 +230,18 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
             gene_call_str_list.append(prettify_gene_event(c))
         gene_call_str = ', '.join(gene_call_str_list)
         with objmode(out='unicode_type'):
-            out = '{score:.3f} {mean_is_exon:.3f} {event_score:.3f} cds_is_multiple_of_three={cds_is_multiple_of_three} \
-                num_stop_codons={num_stop_codons} seq_ends_with_stop_codon={seq_ends_with_stop_codon} {gene_call_str}'.format(
-                    score=score, mean_is_exon=mean_is_exon, event_score=event_score,
+            out = (
+                '{score:.3f} {mean_is_exon:.3f} {cds_ends_score:.3f} num_introns={num_introns}\n'
+                'cds_is_multiple_of_three={cds_is_multiple_of_three} num_stop_codons={num_stop_codons} seq_ends_with_stop_codon={seq_ends_with_stop_codon}\n'
+                'intron_score={intron_score} cds_ends_score={cds_ends_score} gene_length_score={gene_length_score}\n'
+                # 'gene_call: {gene_call_str}\n'
+            ).format(
+                    score=score, mean_is_exon=mean_is_exon, cds_ends_score=cds_ends_score,
+                    num_introns=(len(gene_call) - 2) / 2,
                     cds_is_multiple_of_three=cds_is_multiple_of_three,
                     num_stop_codons=num_stop_codons, seq_ends_with_stop_codon=seq_ends_with_stop_codon,
+                    intron_score=intron_score,
+                    gene_length_score=gene_length_score,
                     gene_call_str=gene_call_str,
             )
         print(out)
@@ -305,7 +308,7 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 @njit
 def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, time_limit=5, debug=False) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
-    debug_start_pos = None  # *************** set cds start position to debug a specific gene call *****************
+    debug_start_pos = None  # *************** set cds start position (0-based) to debug a specific gene call *****************
     # debug_start_pos = 2000
     debug2 = False
 
@@ -315,13 +318,13 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
     skip_till_next_end_idx = False
     all_best_scores = []
     for start_idx in range(len(events)):
-        event = events[start_idx]
+        start_event = events[start_idx]
         if debug_start_pos:
-            if event.pos != debug_start_pos:
+            if start_event.pos != debug_start_pos:
                 continue
             debug2 = True
 
-        if event.type == CDS_START:
+        if start_event.type == CDS_START:
             end_idx = get_end_idx(start_idx, events, preds)
             if end_idx - start_idx < 2:
                 continue
@@ -358,13 +361,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                       ';', len(gene_calls), 'gene calls',
                       # 'in {.2f}s'.format(elapsed if elapsed > 0.1 else '')
                       )
-            if debug2:
-                if event.pos == debug_start_pos:
-                    print('gene_calls', len(gene_calls))
-                    for gene_call in gene_calls:
-                        # if gene_call[-1].pos in (2037, 2034):
-                        print(score_gene_call(preds, gene_call, seq, debug=True), len(gene_call), gene_call[0], gene_call[-1])
-                        # print(build_cds_seq(seq, gene_call))
 
             if gene_calls and len(gene_calls[-1]) == 1:
                 # this is a marker for too many ops
@@ -380,6 +376,14 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 for gene_call in gene_calls:
                     scores.append((score_gene_call(preds, gene_call, seq), gene_call))
                 scores.sort(reverse=True)
+
+                if debug2:
+                    print('gene_calls', len(gene_calls))
+                    for s in scores[:10]:
+                        gene_call = s[1]
+                        print(s)
+                        print(score_gene_call(preds, gene_call, seq, debug=True), len(gene_call), gene_call[0],
+                              gene_call[-1])
 
                 # choose just the best... revisit?
                 all_best_scores.append(scores[0])
@@ -515,7 +519,7 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
         rc_scored_gene_calls = None
 
     # gene calling
-    if debug:
+    if 0 and debug:
         print('forward good events:', get_compact_events([e for e in events if e.score > 0.5]))
         print('introns:')
         print('starts:  GT      ')
