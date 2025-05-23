@@ -81,13 +81,13 @@ def build_prediction_scores_seg(contig_id: str, preds: np.ndarray, rc_preds: np.
 
     name_to_types = {
         'is_exon/is_intron': (MODEL_IS_EXON, MODEL_IS_INTRON),
+        'intron starts/ends': (MODEL_EXON_END, MODEL_EXON_START),
         'cds ends': (MODEL_CDS_START, MODEL_CDS_END),
-        'intron starts/ends': (MODEL_EXON_START, MODEL_EXON_END),
     }
     score_thresholds = {
         'is_exon/is_intron': 0.2,
-        'cds ends': 0.01,
         'intron starts/ends': 0.01,
+        'cds ends': 0.01,
     }
     strands = ['+', '-']
     ps = [preds, rc_preds[:,::-1]]
