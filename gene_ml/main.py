@@ -116,7 +116,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
             with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
                 progress.set_description(f'Processing {path}')
-                for future in as_completed(future_to_args):
+                for future in as_completed(future_to_args, timeout=600):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
 
