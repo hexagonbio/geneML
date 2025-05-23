@@ -181,18 +181,22 @@ def copy_and_append_gene_event_numba(gene_def: list[GeneEventNumbaType], event: 
 
 @njit
 def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, debug=False):
+    # look at the is_exon/is_intron scores based on the intron boundaries defined by the gene call
     last_pos = None
     summed_scores = 0
     num_vals = 0
-    for pos, event, score in gene_call:
+    for pos, event_type, score in gene_call:
         if last_pos is not None:
-            is_exon = event != EXON_START
+            is_exon = event_type in (CDS_END, EXON_END)
             key = MODEL_IS_EXON if is_exon else MODEL_IS_INTRON
-            summed_scores += np.sum(preds[key, last_pos:pos])
+            # other_key = MODEL_IS_INTRON if is_exon else MODEL_IS_EXON
+            # summed_scores += np.sum(preds[key, last_pos+1:pos] > preds[other_key, last_pos+1:pos])
+            summed_scores += np.sum(preds[key, last_pos+1:pos])
+            summed_scores += score  # include the score of the event itself
             num_vals += pos - last_pos
         last_pos = pos
+    event_consistency_score = summed_scores / num_vals if num_vals else 0
 
-    mean_is_exon = summed_scores / num_vals if num_vals else 0
     cds_seq = build_cds_seq(seq, gene_call)
     cds_is_multiple_of_three = len(cds_seq) % 3 == 0
     num_stop_codons = count_stop_codons(cds_seq)
@@ -203,20 +207,10 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
     for e in (gene_call[0], gene_call[-1]):
         cds_ends_score += preds[EVENT_TYPE_MAP[e.type]][e.pos]
 
-    # incorporate intron scores
-    intron_score = 0
-    for i, e in enumerate(gene_call[:-1]):
-        if e.type == EXON_END:
-            e2 = gene_call[i+1]
-            if e2.type != EXON_START:
-                continue
-            intron_score += np.mean(preds[MODEL_IS_INTRON, e.pos+1:e2.pos] - preds[MODEL_IS_EXON, e.pos+1:e2.pos]) - 1
-
     gene_length_score = (gene_call[-1].pos - gene_call[0].pos) / 10000  # slight preference for longer genes
 
     score = (
-        mean_is_exon +
-        intron_score +
+        event_consistency_score +
         cds_ends_score +
         gene_length_score +
         (-np.inf if not cds_is_multiple_of_three else 0) +
@@ -231,16 +225,15 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
         gene_call_str = ', '.join(gene_call_str_list)
         with objmode(out='unicode_type'):
             out = (
-                '{score:.3f} {mean_is_exon:.3f} {cds_ends_score:.3f} num_introns={num_introns}\n'
+                '{score:.3f} {event_consistency_score:.3f} {cds_ends_score:.3f} num_introns={num_introns}\n'
                 'cds_is_multiple_of_three={cds_is_multiple_of_three} num_stop_codons={num_stop_codons} seq_ends_with_stop_codon={seq_ends_with_stop_codon}\n'
-                'intron_score={intron_score} cds_ends_score={cds_ends_score} gene_length_score={gene_length_score}\n'
+                'cds_ends_score={cds_ends_score} gene_length_score={gene_length_score}\n'
                 # 'gene_call: {gene_call_str}\n'
             ).format(
-                    score=score, mean_is_exon=mean_is_exon, cds_ends_score=cds_ends_score,
+                    score=score, event_consistency_score=event_consistency_score, cds_ends_score=cds_ends_score,
                     num_introns=(len(gene_call) - 2) / 2,
                     cds_is_multiple_of_three=cds_is_multiple_of_three,
                     num_stop_codons=num_stop_codons, seq_ends_with_stop_codon=seq_ends_with_stop_codon,
-                    intron_score=intron_score,
                     gene_length_score=gene_length_score,
                     gene_call_str=gene_call_str,
             )
