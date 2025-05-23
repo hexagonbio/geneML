@@ -129,7 +129,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         i += 1
 
     while True:
-        if (not debug and (len(results) >= 100 or results and len(results[-1]) == 1)
+        if (not debug and (len(results) >= 5 or results and len(results[-1]) == 1)
                 or debug and len(results) >= 10000):
             # limit the number of results to speed up
             break
