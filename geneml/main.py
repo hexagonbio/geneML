@@ -151,10 +151,11 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         for log in all_logs:
             f.write(f'{log}\n')
 
-    with open(outpath.replace('.gff', '') + '.seg', 'w') as f:
-        f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
-        for segs in all_segs:
-            f.write(f'{segs}\n')
+    if all_segs:
+        with open(outpath.replace('.gff', '') + '.seg', 'w') as f:
+            f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
+            for segs in all_segs:
+                f.write(f'{segs}\n')
 
 
 def main():
