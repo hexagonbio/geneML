@@ -1,6 +1,6 @@
 import numpy as np
 
-from gene_ml.model_loader import ResidualModelBase
+from geneml.model_loader import ResidualModelBase
 
 
 def chunked_seq_predict(model: ResidualModelBase, seq: str, chunk_size=100000, padding=1000):

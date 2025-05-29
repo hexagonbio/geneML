@@ -2,10 +2,11 @@ import time
 from collections import namedtuple
 
 import numpy as np
-from gene_ml.model_loader import ResidualModelBase, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END, \
-    MODEL_IS_EXON, MODEL_IS_INTRON
-from gene_ml.utils import chunked_seq_predict
 from numba import njit, typeof, typed, objmode, types
+
+from geneml.model_loader import ResidualModelBase, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END, \
+    MODEL_IS_EXON, MODEL_IS_INTRON
+from geneml.utils import chunked_seq_predict
 
 # using dataclass would be nice, but numba doesn't support it
 GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])

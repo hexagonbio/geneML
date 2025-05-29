@@ -5,10 +5,11 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from Bio import SeqIO
-from gene_ml.gene_caller import build_gene_calls, GeneEvent, EXON_END, CDS_END, run_model
-from gene_ml.model_loader import get_cached_gene_ml_model
-from gene_ml.outputs import build_gff_coords, build_prediction_scores_seg
 from tqdm import tqdm
+
+from geneml.gene_caller import build_gene_calls, GeneEvent, EXON_END, CDS_END, run_model
+from geneml.model_loader import get_cached_gene_ml_model
+from geneml.outputs import build_gff_coords, build_prediction_scores_seg
 
 
 def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None, output_segs=False,
