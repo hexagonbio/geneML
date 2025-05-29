@@ -2,10 +2,17 @@ import time
 from collections import namedtuple
 
 import numpy as np
-from numba import njit, typeof, typed, objmode, types
+from numba import njit, objmode, typed, typeof, types
 
-from geneml.model_loader import ResidualModelBase, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END, \
-    MODEL_IS_EXON, MODEL_IS_INTRON
+from geneml.model_loader import (
+    MODEL_CDS_END,
+    MODEL_CDS_START,
+    MODEL_EXON_END,
+    MODEL_EXON_START,
+    MODEL_IS_EXON,
+    MODEL_IS_INTRON,
+    ResidualModelBase,
+)
 from geneml.utils import chunked_seq_predict
 
 # using dataclass would be nice, but numba doesn't support it
@@ -264,8 +271,7 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
                     cds_is_multiple_of_three=cds_is_multiple_of_three,
                     num_stop_codons=num_stop_codons, seq_ends_with_stop_codon=seq_ends_with_stop_codon,
                     gene_length_score=gene_length_score,
-                    gene_call_str=gene_call_str,
-            )
+                    )
         print(out)
         if gene_call_str == 'your gene call here':
             print(cds_seq)

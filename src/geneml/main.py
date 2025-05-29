@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from Bio import SeqIO
 from tqdm import tqdm
 
-from geneml.gene_caller import build_gene_calls, GeneEvent, EXON_END, CDS_END, run_model
+from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_gff_coords, build_prediction_scores_seg
 
