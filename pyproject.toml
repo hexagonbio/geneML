@@ -1,0 +1,32 @@
+[project]
+name = "geneml"
+version = "0.1.0"
+description = "Gene Annotation Across Diverse Fungal Species Using Deep Learning"
+readme = "README.md"
+authors = [
+    { name = "Lawrence Hon", email = "lhon@hexagonbio.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Development Status :: 3 - Alpha"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "biopython>=1.78",
+    "numba>=0.53.1",
+    "numpy>=1.21.0",
+    "tensorflow>=2.17.0",
+    "tqdm>=4.62.0",
+]
+
+[project.urls]
+Repository = "https://github.com/hexagonbio/geneML"
+
+[project.scripts]
+geneml = "geneml.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
