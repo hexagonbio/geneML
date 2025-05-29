@@ -24,7 +24,7 @@ setup(
     python_requires='>=3.7',
     entry_points={
         'console_scripts': [
-            'geneml=gene_ml.main:main',
+            'geneml=geneml.main:main',
         ],
     },
 )

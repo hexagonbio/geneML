@@ -1,10 +1,9 @@
 import numba
 import numpy as np
-from numba import njit, types, typed, objmode
-
 from gene_ml.gene_caller import GeneEvent, CDS_START, EXON_START, CDS_END, EXON_END
 from gene_ml.model_loader import MODEL_IS_EXON, MODEL_IS_INTRON, MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, \
     MODEL_EXON_END
+from numba import njit, types, typed, objmode
 
 
 def get_exon_offsets(gene_call: list[GeneEvent]):
