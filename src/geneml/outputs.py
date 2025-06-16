@@ -24,7 +24,7 @@ def get_exon_offsets(gene_call: list[GeneEvent]):
             last_pos = pos+1
 
 
-def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offset: int, width: int, reverse_complement: bool) -> tuple[int, int, str]:
+def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offset: int, width: int, reverse_complement: bool) -> list:
     gff_rows = []
     # seqname, source, feature, start, end, score, strand, frame, attributes
 
