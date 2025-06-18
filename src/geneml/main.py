@@ -1,9 +1,10 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
 import gc
 import os
 import time
+
 from Bio import SeqIO
+import silence_tensorflow.auto
 from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
@@ -181,6 +182,9 @@ def main():
 
     process_genome(args.input, args.output, contigs_filter=contigs_filter, num_cores=args.num_cores, debug=args.debug,
                    model_path=args.model)
+
+    # keep this from appearing unused
+    silence_tensorflow.auto
 
 
 if __name__ == "__main__":
