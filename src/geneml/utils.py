@@ -3,10 +3,8 @@ import numpy as np
 import psutil
 import warnings
 
-from geneml.model_loader import ResidualModelBase
 
-
-def chunked_seq_predict(model: ResidualModelBase, seq: str, chunk_size=100000, padding=1000):
+def chunked_seq_predict(model, seq: str, chunk_size=100000, padding=1000):
     """
     Predicts the sequence in chunks of a given size to control memory usage, with some padding to handle
     the sequence context
