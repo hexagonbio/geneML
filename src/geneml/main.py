@@ -1,15 +1,15 @@
-import gc
-import multiprocessing
-import os
-import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import gc
+import os
+import time
 from Bio import SeqIO
 from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_gff_coords, build_prediction_scores_seg
+from geneml.utils import compute_optimal_num_parallelism
 
 
 def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None, output_segs=False,
@@ -74,10 +74,9 @@ def reorder_contigs(contigs, num_cores):
 
 
 def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False, model_path=None):
+    all_logs = []
+    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={model_path}, contigs_filter={contigs_filter}')
     genome_start_time = time.time()
-
-    if num_cores is None:
-        num_cores = multiprocessing.cpu_count()
 
     contigs = {}
     genome_size = 0
@@ -87,27 +86,30 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         contigs[record.id] = str(record.seq).upper()
         genome_size += len(record.seq)
 
+    if num_cores is None:
+        num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
+        log = f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count}'
+        all_logs.append(log)
+        print(log)
+    else:
+        tensorflow_thread_count = None
+
     reordered_contigs = reorder_contigs(contigs, num_cores)
 
     results = {}
-    all_logs = []
-    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={model_path}, contigs_filter={contigs_filter}')
     all_segs = []
     if num_cores == 1:
-        print('Running in single-threaded mode')
+        print('Running from main thread, parallelism only for tensorflow')
         for contig_id, seq in reordered_contigs:
             print(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
-            _, r, logs, segs = process_contig(contig_id, seq, model_path, None, bool(contigs_filter), debug=debug)
+            _, r, logs, segs = process_contig(contig_id, seq, model_path, tensorflow_thread_count, bool(contigs_filter), debug=debug)
             results[contig_id] = r
             all_logs.extend(logs)
             all_segs.append(segs)
             elapsed = time.time() - start_time
             print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
-        # if using multiprocessing and sufficient number of contigs, make tensorflow use only one thread within each process
-        tensorflow_thread_count = 1 if len(contigs) > num_cores * 10 else None
-
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
             for contig_id, seq in reordered_contigs:
