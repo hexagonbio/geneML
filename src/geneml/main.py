@@ -138,6 +138,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
                                              gene_call, 0, len(seq), is_rc))
         all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
 
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
     with open(outpath, 'w') as f:
         for gff_row in all_gff_rows:
             formatted_gff_row = '\t'.join(map(str, gff_row))
