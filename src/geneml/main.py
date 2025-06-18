@@ -1,10 +1,10 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import gc
 import os
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from Bio import SeqIO
 import silence_tensorflow.auto
+from Bio import SeqIO
 from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
