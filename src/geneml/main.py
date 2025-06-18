@@ -88,9 +88,10 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     if num_cores is None:
         num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
-        log = f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count}'
+        log = f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count or "all available"}'
         all_logs.append(log)
-        print(log)
+        if num_cores > 1:
+            print(log)
     else:
         tensorflow_thread_count = None
 
