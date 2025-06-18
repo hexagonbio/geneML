@@ -1,7 +1,7 @@
-import time
 from collections import namedtuple
 
 import numpy as np
+import time
 from numba import njit, objmode, typed, typeof, types
 
 from geneml.model_loader import (
@@ -33,7 +33,7 @@ MIN_INTRON_SIZE, MAX_INTRON_SIZE = 30, 400
 
 
 @njit
-def python_time():
+def python_time() -> float:
     with objmode(out='float64'):
         out = time.time()
     return out
@@ -149,6 +149,8 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
     else:
         assert False, 'invalid gene event type'
 
+    # for completeness (even though the next event type might be constrained), add the remaining indices
+    # in the order they appear in the events list
     indices = priority_indices + [i for i in range(start_idx, end_idx) if i not in priority_indices]
     return indices
 
@@ -334,7 +336,7 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, time_limit=5, debug=False) -> list[tuple[float, list[GeneEvent]]]:
+def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, time_limit=300, debug=False) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     debug_start_pos = None  # *************** set cds start position (0-based) to debug a specific gene call *****************
     # debug_start_pos = 2000
@@ -374,6 +376,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             one_gene_events = filter_events_for_one_gene(events[start_idx:end_idx+1])
             # one_gene_events = events[start_idx:end_idx+1]
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
+            recurse_start_time = python_time()
             recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, debug=debug2)
 
             if debug:
@@ -385,11 +388,20 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
 
             if gene_calls and len(gene_calls[-1]) == 1:
                 # this is a marker for too many ops
-                log = ' '.join(['too many ops for ', contig_id, str(start_idx), str(end_idx),
-                                prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
-                                prettify_gene_event(gene_calls[-1][0])])
+                elapsed = python_time() - recurse_start_time
+                with objmode(log='unicode_type'):
+                    log = ' '.join([
+                        'too many ops for', contig_id, str(start_idx), str(end_idx),
+                        prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
+                        prettify_gene_event(gene_calls[-1][0]),
+                        '; elapsed time:', str(np.round(elapsed, 2))])
                 logs.append(log)
+
+                # remove the last gene call marker
                 gene_calls = gene_calls[:-1]
+
+                # short circuit this gene region
+                skip_till_next_end_idx = True
 
             if gene_calls:
 
@@ -413,11 +425,13 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
                                 prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
                 logs.append(log)
+
+                # short circuit this gene region
                 skip_till_next_end_idx = True
     all_best_scores.sort(reverse=True)
 
     elapsed = python_time() - function_start_time
-    if elapsed > 60:
+    if elapsed > 600:
         with objmode(log='unicode_type'):
             log = 'slow {contig_id} at {elapsed:.2f}s'.format(contig_id=contig_id, elapsed=elapsed)
         logs.append(log)
