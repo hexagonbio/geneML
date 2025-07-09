@@ -129,7 +129,9 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     print('Finished processing all contigs')
     gene_count = 0
-    all_gff_rows = []
+    gff_version = '3.1.26'
+    gff_header = ' '.join(['##gff-version', gff_version])
+    all_gff_rows = [(gff_header,)]
     for contig_id, seq in contigs.items():
         if contig_id not in results:
             continue
@@ -139,6 +141,8 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
             gene_count += 1
             gff_rows.extend(build_gff_coords(contig_id, 'geneML', f'GML{gene_count}',
                                              gene_call, 0, len(seq), is_rc))
+        region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
+        all_gff_rows.append((region_header,))
         all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
 
     if dirname := os.path.dirname(outpath):
