@@ -1,3 +1,4 @@
+import os
 import numba
 import numpy as np
 from numba import njit, objmode, typed, types
@@ -77,6 +78,32 @@ def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offs
         ))
 
     return gff_rows
+
+
+def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str, gff_version: str):
+    gene_count = 0
+    gff_header = ' '.join(['##gff-version', gff_version])
+    all_gff_rows = [(gff_header,)]
+    for contig_id, seq in contigs.items():
+        if contig_id not in results:
+            continue
+        filtered_scored_gene_calls = results[contig_id]
+        gff_rows = []
+        for gene_info in filtered_scored_gene_calls:
+            gene_count += 1
+            gene_call, is_rc = gene_info[1:3]
+            gff_rows.extend(build_gff_coords(contig_id, 'geneML', f'GML{gene_count}',
+                                             gene_call, 0, len(seq), is_rc))
+        region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
+        all_gff_rows.append((region_header,))
+        all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
+
+    if dirname := os.path.dirname(outpath):
+        os.makedirs(dirname, exist_ok=True)
+    with open(outpath, 'w', encoding='utf-8') as f:
+        for gff_row in all_gff_rows:
+            formatted_gff_row = '\t'.join(map(str, gff_row))
+            f.write(f'{formatted_gff_row}\n')
 
 
 @njit

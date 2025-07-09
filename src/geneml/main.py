@@ -1,5 +1,4 @@
 import gc
-import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -9,7 +8,7 @@ from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
-from geneml.outputs import build_gff_coords, build_prediction_scores_seg
+from geneml.outputs import build_prediction_scores_seg, write_gff_file
 from geneml.utils import compute_optimal_num_parallelism
 
 
@@ -128,29 +127,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
                     results[contig_id] = r
 
     print('Finished processing all contigs')
-    gene_count = 0
-    gff_version = '3.1.26'
-    gff_header = ' '.join(['##gff-version', gff_version])
-    all_gff_rows = [(gff_header,)]
-    for contig_id, seq in contigs.items():
-        if contig_id not in results:
-            continue
-        filtered_scored_gene_calls = results[contig_id]
-        gff_rows = []
-        for score, gene_call, is_rc in filtered_scored_gene_calls:
-            gene_count += 1
-            gff_rows.extend(build_gff_coords(contig_id, 'geneML', f'GML{gene_count}',
-                                             gene_call, 0, len(seq), is_rc))
-        region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
-        all_gff_rows.append((region_header,))
-        all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
-
-    if dirname := os.path.dirname(outpath):
-        os.makedirs(dirname, exist_ok=True)
-    with open(outpath, 'w') as f:
-        for gff_row in all_gff_rows:
-            formatted_gff_row = '\t'.join(map(str, gff_row))
-            f.write(f'{formatted_gff_row}\n')
+    write_gff_file(contigs, results, outpath, gff_version = "3.1.26")
 
     elapsed = time.time() - genome_start_time
     log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
