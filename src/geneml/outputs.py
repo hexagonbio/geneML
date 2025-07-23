@@ -76,6 +76,17 @@ def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offs
             ".",
             f"ID={gene_id}_exon{i+1};Parent={gene_id}_mRNA",
         ))
+        gff_rows.append((
+            chr_name,
+            source,
+            "CDS",
+            start,
+            end,
+            ".",
+            strand,
+            ".",
+            f"ID={gene_id}_CDS;Parent={gene_id}_mRNA",
+        ))
 
     return gff_rows
 
