@@ -189,6 +189,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
+    { name = "helperlibs" },
     { name = "numba", version = "0.60.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numba", version = "0.61.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "numpy" },
@@ -207,6 +208,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "biopython", specifier = ">=1.78" },
+    { name = "helperlibs", specifier = ">=0.2.2" },
     { name = "numba", specifier = ">=0.53.1" },
     { name = "numpy", specifier = ">=1.21.0" },
     { name = "psutil", specifier = ">=5.9.0" },
@@ -323,6 +325,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/c9/fb430d3277e81eade92e54e87bd73e9f60c98240a86a5f43e3b85620d7d8/h5py-3.13.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:560e71220dc92dfa254b10a4dcb12d56b574d2d87e095db20466b32a93fec3f9", size = 4285580, upload-time = "2025-02-18T16:03:51.895Z" },
     { url = "https://files.pythonhosted.org/packages/3f/9b/3e8cded7877ec84b707df82b9c6289cd1d7ad80fef9a10bb1389c5fee8f2/h5py-3.13.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c10f061764d8dce0a9592ce08bfd5f243a00703325c388f1086037e5d619c5f1", size = 4550898, upload-time = "2025-02-18T16:03:55.832Z" },
     { url = "https://files.pythonhosted.org/packages/cb/47/8353102cff9290861135e13eefff5a916855d2ab23bd052ec7ac144f4c48/h5py-3.13.0-cp39-cp39-win_amd64.whl", hash = "sha256:9c82ece71ed1c2b807b6628e3933bc6eae57ea21dac207dca3470e3ceaaf437c", size = 2960208, upload-time = "2025-02-18T16:04:00.029Z" },
+]
+
+[[package]]
+name = "helperlibs"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "biopython" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/4a/150ec2e0407b934107803009185ceb3884bc4df403deb148cda71f806db5/helperlibs-0.2.2.tar.gz", hash = "sha256:a21f5703317ea7804ef55ae2de207403bff1019004128397898eb07eb73daeb5", size = 38076, upload-time = "2025-06-02T13:55:08.953Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/91/afbb9c951da16feabd8ad6dea01577fdaecb22d0e711eb5b51128b58579c/helperlibs-0.2.2-py2.py3-none-any.whl", hash = "sha256:63ac19875ea3d0706474c8c347b1a83e2e4edbdb7a7d4c0aefbfd1a671de8990", size = 24092, upload-time = "2025-06-02T13:55:07.335Z" },
 ]
 
 [[package]]

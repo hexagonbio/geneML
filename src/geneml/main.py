@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import silence_tensorflow.auto
-from Bio import SeqIO
+from helperlibs.bio import seqio
 from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
@@ -79,7 +79,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     contigs = {}
     genome_size = 0
-    for record in SeqIO.parse(path, "fasta"):
+    for record in seqio.parse(path):
         if contigs_filter is not None and record.id not in contigs_filter:
             continue
         contigs[record.id] = str(record.seq).upper()
