@@ -1,5 +1,6 @@
 import gc
 import time
+from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import silence_tensorflow.auto  # noqa: F401
@@ -8,12 +9,12 @@ from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
+from geneml.params import build_params_namedtuple
 from geneml.outputs import build_prediction_scores_seg, write_gff_file, write_fastas
 from geneml.utils import compute_optimal_num_parallelism
 
 
-def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_count=None, output_segs=False,
-                   debug=False) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
+def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
@@ -22,9 +23,9 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
-    model = get_cached_gene_ml_model(model_path)
+    model = get_cached_gene_ml_model(params.model_path)
     preds, rc_preds, seq, rc_seq = run_model(model, seq)
-    filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, debug=debug)
+    filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     rebuilt_results = []
     for score, gene_call, is_rc in filtered_scored_gene_calls:
@@ -37,7 +38,7 @@ def process_contig(contig_id: str, seq: str, model_path: str, tensorflow_thread_
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
     rebuilt_logs = [str(log) for log in logs]
 
-    if output_segs:
+    if params.output_segs:
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
     else:
         segs = ''
@@ -71,15 +72,16 @@ def reorder_contigs(contigs, num_cores):
     return reordered_contigs
 
 
-def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False, model_path=None):
-    all_logs = []
-    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={model_path}, contigs_filter={contigs_filter}')
+def process_genome(path: str, outpath: str, params: namedtuple):
+    num_cores = params.num_cores
+
+    all_logs = [f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}']
     genome_start_time = time.time()
 
     contigs = {}
     genome_size = 0
     for record in seqio.parse(path):
-        if contigs_filter is not None and record.id not in contigs_filter:
+        if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
         contigs[record.id] = str(record.seq).upper()
         genome_size += len(record.seq)
@@ -102,7 +104,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         for contig_id, seq in reordered_contigs:
             print(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
-            _, r, logs, segs = process_contig(contig_id, seq, model_path, tensorflow_thread_count, bool(contigs_filter), debug=debug)
+            _, r, logs, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
             results[contig_id] = r
             all_logs.extend(logs)
             all_segs.append(segs)
@@ -112,7 +114,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
             for contig_id, seq in reordered_contigs:
-                future = pool.submit(process_contig, contig_id, seq, model_path, tensorflow_thread_count)
+                future = pool.submit(process_contig, contig_id, seq, params, tensorflow_thread_count)
                 future_to_args[future] = contig_id, len(seq)
 
             with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
@@ -151,19 +153,16 @@ def main():
     parser = argparse.ArgumentParser(description="Process a genome file and output GFF coordinates.")
     parser.add_argument("input", type=str, help="Path to the input genome file.")
     parser.add_argument("output", type=str, help="Path to the output GFF file.")
+    parser.add_argument('--sensitive', action='store_true', help="Use parameters to increase sensitivity but may run slower.")
     parser.add_argument('--contigs-filter', type=str, default=None,)
     parser.add_argument('--num-cores', type=int, default=None, help="Number of cores to use for processing (default: all).")
     parser.add_argument('--debug', action='store_true', help="Enable debug mode.")
     parser.add_argument('--model', type=str, default=None, help="model id or path to model file")
+
     args = parser.parse_args()
+    params = build_params_namedtuple(args)
 
-    if args.contigs_filter is not None:
-        contigs_filter = args.contigs_filter.split(',')
-    else:
-        contigs_filter = None
-
-    process_genome(args.input, args.output, contigs_filter=contigs_filter, num_cores=args.num_cores, debug=args.debug,
-                   model_path=args.model)
+    process_genome(args.input, args.output, params)
 
 
 if __name__ == "__main__":

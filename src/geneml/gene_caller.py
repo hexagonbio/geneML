@@ -15,6 +15,7 @@ from geneml.model_loader import (
     MODEL_IS_INTRON,
     ResidualModelBase,
 )
+from geneml.params import Params
 from geneml.utils import chunked_seq_predict
 
 # using dataclass would be nice, but numba doesn't support it
@@ -30,8 +31,6 @@ EVENT_TYPE_MAP = (MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_E
 
 GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
 GeneCallNumbaType = typeof(typed.List.empty_list(GeneEventNumbaType))
-
-MIN_INTRON_SIZE, MAX_INTRON_SIZE = 30, 400
 
 
 @njit
@@ -126,7 +125,7 @@ def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None
 
 
 @njit
-def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[GeneEvent], start_idx: int) -> list[int]:
+def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[GeneEvent], start_idx: int, params: Params) -> list[int]:
     """ Rerank the indices of the events list based on the most likely next events, to increase chance of identifying
     the best gene call based on the prediction scores within the earlier parts of the recursion
     """
@@ -145,7 +144,7 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
 
     elif gene[-1].type == EXON_END:
         end_idx = start_idx
-        while events[end_idx].pos < gene[-1].pos + MAX_INTRON_SIZE and end_idx < len(events) - 1:
+        while events[end_idx].pos < gene[-1].pos + params.max_intron_size and end_idx < len(events) - 1:
             end_idx += 1
         priority_indices = [i for i, e in enumerated_events[start_idx:end_idx] if e.type == EXON_START and e.score > 0.2]
     else:
@@ -158,7 +157,8 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
 
 
 @njit
-def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str, debug=False) -> int:
+def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
+            params: namedtuple, debug2=False) -> int:
     """ Recursively attempt to build genes from the events list
     """
     num_ops = 1
@@ -169,10 +169,10 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         gene.append(events[i])
         i += 1
 
-    indices = rerank_indices_based_on_most_likely_next_events(gene, events, i)
+    indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params)
     for i in indices:
-        if (not debug and (len(results) >= 100 or results and len(results[-1]) == 1)
-                or debug and len(results) >= 10000):
+        if (not debug2 and (len(results) >= params.num_candidate_gene_calls_per_region or results and len(results[-1]) == 1)
+                or debug2 and len(results) >= 10000):
             # limit the number of results to speed up
             break
 
@@ -180,15 +180,15 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         new_gene = copy_and_append_gene_event_numba(gene, event)
 
         # handle cds end
-        if gene and event.type == CDS_END and (debug or check_sequence_validity(new_gene, seq)):
+        if gene and event.type == CDS_END and (debug2 or check_sequence_validity(new_gene, seq)):
             results.append(new_gene)
 
         if i + 1 >= len(events):
             break  # no more additional events to consider
 
         # handle intron start (exon end)
-        if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug or check_sequence_validity(new_gene, seq)):
-            num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
+        if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug2 or check_sequence_validity(new_gene, seq)):
+            num_ops += recurse(results, events, i + 1, new_gene, seq, params, debug2=debug2)
             if num_ops > 10000:
                 marker = typed.List.empty_list(GeneEventNumbaType)
                 marker.append(event)
@@ -198,10 +198,10 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         # handle intron end (exon start)
         if gene[-1].type == EXON_END:
             intron_size = event.pos - gene[-1].pos
-            if intron_size > MAX_INTRON_SIZE:
+            if intron_size > params.max_intron_size:
                 break
-            if event.type == EXON_START and intron_size >= MIN_INTRON_SIZE:
-                num_ops += recurse(results, events, i + 1, new_gene, seq, debug=debug)
+            if event.type == EXON_START and intron_size >= params.min_intron_size:
+                num_ops += recurse(results, events, i + 1, new_gene, seq, params, debug2=debug2)
 
     return num_ops
 
@@ -338,7 +338,7 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, time_limit=300, debug=False) -> list[tuple[float, list[GeneEvent]]]:
+def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, params: namedtuple) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     debug_start_pos = None  # *************** set cds start position (0-based) to debug a specific gene call *****************
     # debug_start_pos = 2000
@@ -379,9 +379,9 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             # one_gene_events = events[start_idx:end_idx+1]
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
-            recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, debug=debug2)
+            recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params, debug2=debug2)
 
-            if debug:
+            if params.debug:
                 # elapsed = time.time() - start_time
                 print(start_idx, end_idx, prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
                       ';', len(gene_calls), 'gene calls',
@@ -423,7 +423,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 # choose just the best... revisit?
                 all_best_scores.append(scores[0])
 
-            if time_limit and python_time() - start_time > time_limit:
+            if params.gene_range_time_limit and python_time() - start_time > params.gene_range_time_limit:
                 log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
                                 prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
                 logs.append(log)
@@ -533,29 +533,27 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
     return preds, rc_preds, seq, rc_seq
 
 
-def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str, contig_id: str,
-                     forward_strand_only=False, debug=False):
-
-    if debug:
+def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str, contig_id: str, params: namedtuple):
+    if params.debug:
         print('\n******************** forward strand')
     events = get_gene_ml_events(preds)
     # for event in events:
     #     if event.type == CDS_END:
     #         print(seq[event.pos-6:event.pos+6], seq[event.pos-2:event.pos+1], event.score, event.pos)
     logs = typed.List.empty_list(types.unicode_type)
-    scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', logs, debug=debug)
+    scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', logs, params)
 
-    if not forward_strand_only:
-        if debug:
+    if not params.forward_strand_only:
+        if params.debug:
             print('\n******************** reverse strand')
         rc_events = get_gene_ml_events(rc_preds)
-        rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', logs, debug=debug)
+        rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', logs, params)
     else:
         rc_events = None
         rc_scored_gene_calls = None
 
     # gene calling
-    if 0 and debug:
+    if 0 and params.debug:
         print('forward good events:', get_compact_events([e for e in events if e.score > 0.5]))
         print('introns:')
         print('starts:  GT      ')
@@ -566,13 +564,13 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
         for event in events:
             if event.type == EXON_START:
                 print(f'{event.pos:<5d}', seq[event.pos-6:event.pos+2], f'{event.score:.2f}')
-        if not forward_strand_only:
+        if not params.forward_strand_only:
             print('reverse good events:', get_compact_events([e for e in rc_events if e.score > 0.5]))
     sequence_length = len(seq)
     filtered_scored_gene_calls, seen = filter_best_scored_gene_calls(
-        sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls, debug=debug)
+        sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls, debug=params.debug)
 
-    if debug and forward_strand_only and filtered_scored_gene_calls:
+    if params.debug and params.forward_strand_only and filtered_scored_gene_calls:
         get_intron_site_sequence(seq, filtered_scored_gene_calls[0][1], debug=True)
 
     return filtered_scored_gene_calls, logs
