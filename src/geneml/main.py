@@ -126,7 +126,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
                     results[contig_id] = r
 
     print('Finished processing all contigs')
-    write_gff_file(contigs, results, outpath, gff_version = "3.1.26")
+    write_gff_file(contigs, results, outpath)
     write_fastas(contigs, results, outpath)
 
     elapsed = time.time() - genome_start_time

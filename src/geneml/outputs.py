@@ -98,6 +98,7 @@ def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
         if contig_id not in results:
             continue
         filtered_scored_gene_calls = results[contig_id]
+        filtered_scored_gene_calls.sort(key=lambda x: x[1][0].pos)  # sort by gene position
         contig_length = len(seq)
         for gene_info in filtered_scored_gene_calls:
             gene_count += 1
@@ -107,17 +108,16 @@ def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
             yield contig_id, gene_id, is_rc, gene_call, contig_length
 
 
-def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str, gff_version: str):
+def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str):
+    gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
     for contig_id, seq in contigs.items():
         region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
         all_gff_rows.append((region_header,))
 
-    gff_rows = []
     for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
-        gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, is_rc))
-    all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
+        all_gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, is_rc))
 
     if dirname := os.path.dirname(outpath):
         os.makedirs(dirname, exist_ok=True)
