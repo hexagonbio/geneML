@@ -2,6 +2,8 @@ from collections import namedtuple
 
 import numpy as np
 import time
+
+from Bio.Seq import reverse_complement
 from numba import njit, objmode, typed, typeof, types
 
 from geneml.model_loader import (
@@ -522,8 +524,7 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
 
     preds = chunked_seq_predict(model, seq)
     if not forward_strand_only:
-        # rc_seq = reverse_complement(seq)
-        rc_seq = seq[::-1].translate(str.maketrans('ACGT', 'TGCA'))
+        rc_seq = reverse_complement(seq)
         rc_preds = chunked_seq_predict(model, rc_seq)
     else:
         rc_seq = None
