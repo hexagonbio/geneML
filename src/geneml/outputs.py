@@ -102,7 +102,7 @@ def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
         for gene_info in filtered_scored_gene_calls:
             gene_count += 1
             score, gene_call, is_rc = gene_info
-            gene_id = f'GML{gene_count}'
+            gene_id = f'GML{gene_count:05d}'
 
             yield contig_id, gene_id, is_rc, gene_call, contig_length
 
