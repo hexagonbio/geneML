@@ -1,9 +1,10 @@
 import os
 import numba
 import numpy as np
+from Bio.Seq import reverse_complement, translate
 from numba import njit, objmode, typed, types
 
-from geneml.gene_caller import CDS_END, CDS_START, EXON_END, EXON_START, GeneEvent
+from geneml.gene_caller import CDS_END, CDS_START, EXON_END, EXON_START, GeneEvent, build_cds_seq
 from geneml.model_loader import (
     MODEL_CDS_END,
     MODEL_CDS_START,
@@ -91,23 +92,32 @@ def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offs
     return gff_rows
 
 
-def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str, gff_version: str):
+def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
     gene_count = 0
-    gff_header = ' '.join(['##gff-version', gff_version])
-    all_gff_rows = [(gff_header,)]
     for contig_id, seq in contigs.items():
         if contig_id not in results:
             continue
         filtered_scored_gene_calls = results[contig_id]
-        gff_rows = []
+        contig_length = len(seq)
         for gene_info in filtered_scored_gene_calls:
             gene_count += 1
-            gene_call, is_rc = gene_info[1:3]
-            gff_rows.extend(build_gff_coords(contig_id, 'geneML', f'GML{gene_count}',
-                                             gene_call, 0, len(seq), is_rc))
+            score, gene_call, is_rc = gene_info
+            gene_id = f'GML{gene_count}'
+
+            yield contig_id, gene_id, is_rc, gene_call, contig_length
+
+
+def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str, gff_version: str):
+    gff_header = ' '.join(['##gff-version', gff_version])
+    all_gff_rows = [(gff_header,)]
+    for contig_id, seq in contigs.items():
         region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
         all_gff_rows.append((region_header,))
-        all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
+
+    gff_rows = []
+    for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+        gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, is_rc))
+    all_gff_rows.extend(sorted(gff_rows, key=lambda o: o[3]))
 
     if dirname := os.path.dirname(outpath):
         os.makedirs(dirname, exist_ok=True)
@@ -115,6 +125,27 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
         for gff_row in all_gff_rows:
             formatted_gff_row = '\t'.join(map(str, gff_row))
             f.write(f'{formatted_gff_row}\n')
+
+
+def write_fastas(contigs: dict[str, str], results: dict[str, list], outpath: str):
+    line_length = 60
+    rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
+    filename_prefix = outpath.replace('.gff', '')
+    cds_filename = filename_prefix + '.cds.fasta'
+    prot_filename = filename_prefix + '.prot.fasta'
+    with open(cds_filename, 'w') as f_cds, open(prot_filename, 'w') as f_prot:
+        for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+            contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
+
+            cds_seq = build_cds_seq(contig_seq, gene_call)
+            print(f'>{gene_id}', file=f_cds)
+            for i in range(0, len(cds_seq), line_length):
+                print(cds_seq[i:i+line_length], file=f_cds)
+
+            aa_seq = translate(cds_seq)
+            print(f'>{gene_id}', file=f_prot)
+            for i in range(0, len(aa_seq), line_length):
+                print(aa_seq[i:i+line_length], file=f_prot)
 
 
 @njit

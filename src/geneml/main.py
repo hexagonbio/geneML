@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
-from geneml.outputs import build_prediction_scores_seg, write_gff_file
+from geneml.outputs import build_prediction_scores_seg, write_gff_file, write_fastas
 from geneml.utils import compute_optimal_num_parallelism
 
 
@@ -127,6 +127,7 @@ def process_genome(path, outpath, num_cores=1, contigs_filter=None, debug=False,
 
     print('Finished processing all contigs')
     write_gff_file(contigs, results, outpath, gff_version = "3.1.26")
+    write_fastas(contigs, results, outpath)
 
     elapsed = time.time() - genome_start_time
     log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
