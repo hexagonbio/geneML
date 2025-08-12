@@ -48,11 +48,11 @@ def prettify_gene_event(event: GeneEvent) -> str:
 
 
 @njit
-def get_gene_ml_events(preds: np.ndarray):
-    cds_starts = np.where(preds[MODEL_CDS_START] > 0.01)[0]
-    cds_ends = np.where(preds[MODEL_CDS_END] > 0.01)[0]
-    exon_starts = np.where(preds[MODEL_EXON_START] > 0.01)[0]
-    exon_ends = np.where(preds[MODEL_EXON_END] > 0.01)[0]
+def get_gene_ml_events(preds: np.ndarray, params: namedtuple):
+    cds_starts = np.where(preds[MODEL_CDS_START] >= params.cds_start_min_score)[0]
+    cds_ends = np.where(preds[MODEL_CDS_END] >= params.cds_end_min_score)[0]
+    exon_starts = np.where(preds[MODEL_EXON_START] >= params.exon_start_min_score)[0]
+    exon_ends = np.where(preds[MODEL_EXON_END] >= params.exon_end_min_score)[0]
 
     events = typed.List.empty_list(GeneEventNumbaType)
     events.extend([GeneEvent(i, CDS_START, preds[MODEL_CDS_START, i]) for i in cds_starts])
@@ -536,7 +536,7 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
 def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str, contig_id: str, params: namedtuple):
     if params.debug:
         print('\n******************** forward strand')
-    events = get_gene_ml_events(preds)
+    events = get_gene_ml_events(preds, params)
     # for event in events:
     #     if event.type == CDS_END:
     #         print(seq[event.pos-6:event.pos+6], seq[event.pos-2:event.pos+1], event.score, event.pos)
@@ -546,7 +546,7 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
     if not params.forward_strand_only:
         if params.debug:
             print('\n******************** reverse strand')
-        rc_events = get_gene_ml_events(rc_preds)
+        rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', logs, params)
     else:
         rc_events = None
