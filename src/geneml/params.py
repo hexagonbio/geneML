@@ -3,7 +3,7 @@ from collections import namedtuple
 
 Params = namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
-    'exon_start_min_score', 'exon_end_min_score', 'num_candidate_gene_calls_per_region',
+    'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
     'model_path', 'forward_strand_only', 'gene_range_time_limit',
     'contigs_filter', 'output_segs',
     'num_cores', 'debug', 'input', 'output',
@@ -34,14 +34,13 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'input': args.input,
         'output': args.output,
 
-        # default sensitivity parameters
-        'min_intron_size': 30,
-        'max_intron_size': 400,
-        'cds_start_min_score': 0.01,
-        'cds_end_min_score': 0.01,
-        'exon_start_min_score': 0.01,
-        'exon_end_min_score': 0.01,
-        'num_candidate_gene_calls_per_region': 100,
+        'min_intron_size': args.min_intron_size,
+        'max_intron_size': args.max_intron_size,
+        'cds_start_min_score': args.cds_start_min_score,
+        'cds_end_min_score': args.cds_end_min_score,
+        'exon_start_min_score': args.exon_start_min_score,
+        'exon_end_min_score': args.exon_end_min_score,
+        'gene_candidates': args.gene_candidates,
     }
 
     if args.sensitive:
@@ -52,7 +51,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
             'cds_end_min_score': 0.001,
             'exon_start_min_score': 0.001,
             'exon_end_min_score': 0.001,
-            'num_candidate_gene_calls_per_region': 1000,
+            'gene_candidates': 1000,
         })
 
     return Params(*[params_dict[name] for name in Params._fields])

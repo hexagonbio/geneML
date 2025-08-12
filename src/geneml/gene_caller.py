@@ -171,7 +171,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
     indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params)
     for i in indices:
-        if (not debug2 and (len(results) >= params.num_candidate_gene_calls_per_region or results and len(results[-1]) == 1)
+        if (not debug2 and (len(results) >= params.gene_candidates or results and len(results[-1]) == 1)
                 or debug2 and len(results) >= 10000):
             # limit the number of results to speed up
             break
