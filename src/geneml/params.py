@@ -45,8 +45,6 @@ def build_params_namedtuple(args: Namespace) -> Params:
 
     if args.sensitive:
         params_dict.update({
-            'min_intron_size': 10,
-            'max_intron_size': 1000,
             'cds_start_min_score': 0.001,
             'cds_end_min_score': 0.001,
             'exon_start_min_score': 0.001,
