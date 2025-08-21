@@ -46,9 +46,34 @@ def prettify_gene_event(event: GeneEvent) -> str:
         out = '{pos}:{type}:{score:.1f}'.format(pos=event.pos, type=event.type, score=event.score)
     return out
 
+@njit
+def moving_average(x: np.ndarray, w: int) -> np.ndarray:
+    # https://stackoverflow.com/a/54628145
+    return np.convolve(x, np.ones(w), 'valid') / w
+
+
+@njit
+def left_pad(x: np.ndarray, pad_width: int, dtype=np.float64) -> np.ndarray:
+    """Left pad a 1D array with zeros"""
+    if pad_width <= 0:
+        return x
+    padded = np.zeros(x.shape[0] + pad_width, dtype=dtype)
+    # left pad but shift right by one
+    padded[1:len(x)+1] = x
+    return padded
+
 
 @njit
 def get_gene_ml_events(preds: np.ndarray, params: namedtuple):
+    # exon_or_intron = preds[MODEL_IS_EXON] > preds[MODEL_IS_INTRON]
+    # pad_size = 30
+    # rolling_ei = left_pad(moving_average(exon_or_intron, pad_size), pad_size-1)
+    # # print(exon_or_intron)
+    # # print(rolling_ei)
+    # # assert False
+    # exon_starts = np.where((preds[MODEL_EXON_START] >= params.exon_start_min_score) & (rolling_ei > 0.4))[0]
+    # exon_ends = np.where((preds[MODEL_EXON_END] >= params.exon_end_min_score) & (rolling_ei < 0.6))[0]
+
     cds_starts = np.where(preds[MODEL_CDS_START] >= params.cds_start_min_score)[0]
     cds_ends = np.where(preds[MODEL_CDS_END] >= params.cds_end_min_score)[0]
     exon_starts = np.where(preds[MODEL_EXON_START] >= params.exon_start_min_score)[0]
