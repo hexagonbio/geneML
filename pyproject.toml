@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Gene Annotation Across Diverse Fungal Species Using Deep Learning"
 readme = "README.md"
 authors = [
-    { name = "Lawrence Hon", email = "lhon@hexagonbio.com" }
+    { name = "Lawrence Hon", email = "lhon@hexagonbio.com" },
+    { name = "Lisa Vader", email = "lisvad@biosustain.dtu.dk" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -24,6 +25,10 @@ dependencies = [
     # to avoid tensorflow warning messages: https://github.com/tensorflow/tensorflow/issues/54499#issuecomment-1050103601
     "tensorflow-cpu>=2.17.0;sys_platform == 'linux'",
     "tqdm>=4.62.0",
+]
+license = "GPL-3.0-only"
+license-files = [
+    "LICENSE",
 ]
 
 [project.urls]
