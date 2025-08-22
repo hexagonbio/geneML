@@ -109,8 +109,6 @@ def main():
 
     tee.f = open(local_logpath, 'w')
 
-    assert int(args.context_length) in [80, 240, 400, 800, 2000, 10000], 'failed: int(args.context_length) in [80, 240, 400, 800, 2000, 10000]'
-
     assert args.train_path, 'failed: args.train_path'
     CL_max = int(os.path.basename(args.train_path).split('_')[2])
     SL = int(os.path.basename(args.train_path).split('_')[3])
@@ -137,15 +135,13 @@ def main():
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4])
         BATCH_SIZE = 18*N_GPUS
+    elif int(args.context_length) == 768:
+        W =  np.asarray([5,  5,  7,  11, 11, 11, 11, 11, 11, 11])
+        AR = np.asarray([1,  1,  1,  2,  2,  4,  4,  8,  16, 1])
+        BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 800:
-        W = np.asarray([
-            11, 11, 11, 11, 11, 11, 11, 11,
-            11, 11,
-        ])
-        AR = np.asarray([
-            1, 1, 1, 1, 4, 4, 4, 4,
-            10, 10,
-        ])
+        W =  np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
+        AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
         BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
@@ -159,6 +155,8 @@ def main():
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10, 25, 25, 25, 25])
         BATCH_SIZE = 6*N_GPUS
+    else:
+        assert False, 'failed: int(args.context_length) does not match any known configuration'
 
     # Hyper-parameters:
     # L: Number of convolution kernels
