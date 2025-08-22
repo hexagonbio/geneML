@@ -1,9 +1,9 @@
 ###############################################################################
-'''This parser takes as input the text files canonical_dataset.txt and 
-canonical_sequence.txt, and produces a .h5 file datafile_{}_{}.h5,
-which will be later processed to create dataset_{}_{}.h5. The file
-dataset_{}_{}.h5 will have datapoints of the form (X,Y), and can be
-understood by Keras models.'''
+# This parser takes as input the text files canonical_dataset.txt and
+# canonical_sequence.txt, and produces a .h5 file datafile_{}_{}.h5,
+# which will be later processed to create dataset_{}_{}.h5. The file
+# dataset_{}_{}.h5 will have datapoints of the form (X,Y), and can be
+# understood by Keras models.
 ###############################################################################
 
 import os
@@ -78,7 +78,7 @@ fpr2.close()
 
 ###############################################################################
 
-h5f = h5py.File(os.path.join(data_dir, 'datafile' 
+h5f = h5py.File(os.path.join(data_dir, 'datafile'
                 + '_' + mode + '_' + str(CL_max) + '_' + suffix
                 + '.h5'), 'w')
 
@@ -95,7 +95,7 @@ h5f.create_dataset('CDS_START', data=asarray(CDS_START))
 h5f.create_dataset('CDS_END', data=asarray(CDS_END))
 h5f.create_dataset('JN_START', data=asarray(JN_START))
 h5f.create_dataset('JN_END', data=asarray(JN_END))
-h5f.create_dataset('SEQ', data=asarray(SEQ)) 
+h5f.create_dataset('SEQ', data=asarray(SEQ))
 
 h5f.close()
 

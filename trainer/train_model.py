@@ -89,7 +89,7 @@ def main():
 
     # works locally and on Vertex AI
     from model import GeneML
-    from utils import clip_datapoints, print_topl_statistics, print_basic_statistics
+    from utils import clip_datapoints, print_basic_statistics, print_topl_statistics
 
     args = get_args()
 

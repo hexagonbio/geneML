@@ -57,8 +57,8 @@ TRANSLATION_TABLE = bytes.maketrans(FROMCHARS, TOCHARS)
 def create_datapoints(seq, strand, tx_start, tx_end, jn_start, jn_end, SL, CL_max, num_classes):
     # This function first converts the sequence into an integer array, where
     # A, C, G, T, N are mapped to 1, 2, 3, 4, 0 respectively. If the strand is
-    # negative, then reverse complementing is done. The splice junctions 
-    # are also converted into an array of integers, where 0, 1, 2, -1 
+    # negative, then reverse complementing is done. The splice junctions
+    # are also converted into an array of integers, where 0, 1, 2, -1
     # correspond to no splicing, acceptor, donor and missing information
     # respectively. It then calls reformat_data and one_hot_encode
     # and returns X, Y which can be used by Keras models.
@@ -69,7 +69,7 @@ def create_datapoints(seq, strand, tx_start, tx_end, jn_start, jn_end, SL, CL_ma
     seq = seq.upper().translate(TRANSLATION_TABLE)
 
     tx_start = int(tx_start)
-    tx_end = int(tx_end) 
+    tx_end = int(tx_end)
 
     jn_start = list(map(lambda x: list(map(int, re.split(b',', x)[:-1])), jn_start))
     jn_end = list(map(lambda x: list(map(int, re.split(b',', x)[:-1])), jn_end))
@@ -175,7 +175,7 @@ def clip_datapoints(X, Y, CL, N_GPUS, CL_max):
     # multiple of N_GPUS. Failure to ensure this often results in crashes.
     # (ii) If the required context length is less than CL_max, then
     # appropriate clipping is done below.
-    # Additionally, Y is also converted to a list (the .h5 files store 
+    # Additionally, Y is also converted to a list (the .h5 files store
     # them as an array).
 
     rem = X.shape[0] % N_GPUS

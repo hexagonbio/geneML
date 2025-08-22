@@ -1,4 +1,5 @@
 import os
+
 import numba
 import numpy as np
 from Bio.Seq import reverse_complement, translate
