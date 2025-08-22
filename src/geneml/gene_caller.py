@@ -146,7 +146,13 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
         end_idx = start_idx
         while events[end_idx].pos < gene[-1].pos + params.max_intron_size and end_idx < len(events) - 1:
             end_idx += 1
-        priority_indices = [i for i, e in enumerated_events[start_idx:end_idx] if e.type == EXON_START and e.score > 0.2]
+        priority_indices = []
+        for i, e in enumerated_events[start_idx:end_idx]:
+            if e.type == EXON_START:
+                relative_pos = e.pos-gene[-1].pos
+                pos_score = (params.max_intron_size-relative_pos)/params.max_intron_size
+                if pos_score+e.score > 1:
+                    priority_indices.append(i)
     else:
         assert False, 'invalid gene event type'
 
