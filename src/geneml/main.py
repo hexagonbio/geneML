@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
+from geneml.outputs import build_prediction_scores_seg, write_fastas, write_gff_file
 from geneml.params import build_params_namedtuple
-from geneml.outputs import build_prediction_scores_seg, write_gff_file, write_fastas
 from geneml.utils import compute_optimal_num_parallelism
 
 
@@ -19,7 +19,6 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
-    import silence_tensorflow.auto  # noqa: F401
     import tensorflow as tf
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)

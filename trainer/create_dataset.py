@@ -12,7 +12,6 @@ import time
 
 import h5py
 import numpy as np
-
 from utils import create_datapoints
 
 # from constants import *
@@ -135,4 +134,4 @@ h5f2.close()
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
-###############################################################################         
+###############################################################################
