@@ -1,4 +1,5 @@
 import gc
+import os
 import time
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -23,8 +24,14 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
+    #Get model scores
     model = get_cached_gene_ml_model(params.model_path)
     preds, rc_preds, seq, rc_seq = run_model(model, seq)
+
+    if params.output_segs:
+        segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
+        return contig_id, [], [], segs
+
     filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     rebuilt_results = []
@@ -38,11 +45,6 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
     rebuilt_logs = [str(log) for log in logs]
 
-    if params.output_segs:
-        segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
-    else:
-        segs = ''
-
     # explicitly clean up memory after finishing a contig
     del preds
     del rc_preds
@@ -50,7 +52,7 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
     del logs
     gc.collect()
 
-    return contig_id, rebuilt_results, rebuilt_logs, segs
+    return contig_id, rebuilt_results, rebuilt_logs, None
 
 
 def reorder_contigs(contigs, num_cores):
@@ -107,7 +109,8 @@ def process_genome(path: str, outpath: str, params: namedtuple):
             _, r, logs, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
             results[contig_id] = r
             all_logs.extend(logs)
-            all_segs.append(segs)
+            if segs:
+                all_segs.append(segs)
             elapsed = time.time() - start_time
             print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
@@ -128,23 +131,25 @@ def process_genome(path: str, outpath: str, params: namedtuple):
                     results[contig_id] = r
 
     print('Finished processing all contigs')
-    write_gff_file(contigs, results, outpath)
-    write_fastas(contigs, results, outpath)
+
+    basepath = os.path.splitext(outpath)[0]
+    if all_segs:
+        with open(basepath+'.seg', 'w') as f:
+            f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
+            for segs in all_segs:
+                f.write(f'{segs}\n')
+    else:
+        write_gff_file(contigs, results, outpath)
+        write_fastas(contigs, results, basepath)
 
     elapsed = time.time() - genome_start_time
     log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
     print(log)
     all_logs.append(log)
 
-    with open(outpath + '.log', 'w') as f:
+    with open(basepath + '.log', 'w') as f:
         for log in all_logs:
             f.write(f'{log}\n')
-
-    if all_segs:
-        with open(outpath.replace('.gff', '') + '.seg', 'w') as f:
-            f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
-            for segs in all_segs:
-                f.write(f'{segs}\n')
 
 
 def main():
@@ -166,11 +171,11 @@ def main():
     advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s)")
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s)")
     advanced.add_argument('--contigs-filter', type=str, default=None, help="Run only on selected contigs (comma separated string)")
+    advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file")
     advanced.add_argument('--debug', action='store_true', help="Enable debug mode.")
 
     args = parser.parse_args()
     params = build_params_namedtuple(args)
-
     process_genome(args.input, args.output, params)
 
 

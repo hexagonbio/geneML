@@ -13,21 +13,13 @@ def build_params_namedtuple(args: Namespace) -> Params:
     """
     numba can't handle Namespace, or a dictionary of mixed typed values, but it can handle a namedtuple.
     """
-
-    if args.contigs_filter is not None:
-        contigs_filter = args.contigs_filter.split(',')
-        output_segs = True
-    else:
-        contigs_filter = None
-        output_segs = False
-
     params_dict = {
         'model_path': args.model,
         'forward_strand_only': False,
         'gene_range_time_limit': 300,
 
-        'contigs_filter': contigs_filter,
-        'output_segs': output_segs,
+        'contigs_filter': args.contigs_filter.split(',') if args.contigs_filter else None,
+        'output_segs': args.write_raw_scores,
 
         'num_cores': args.num_cores,
         'debug': args.debug,

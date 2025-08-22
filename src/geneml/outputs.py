@@ -127,12 +127,11 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
             f.write(f'{formatted_gff_row}\n')
 
 
-def write_fastas(contigs: dict[str, str], results: dict[str, list], outpath: str):
+def write_fastas(contigs: dict[str, str], results: dict[str, list], basepath: str):
     line_length = 60
     rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
-    filename_prefix = outpath.replace('.gff', '')
-    cds_filename = filename_prefix + '.cds.fasta'
-    prot_filename = filename_prefix + '.prot.fasta'
+    cds_filename = basepath+'.cds.fasta'
+    prot_filename = basepath+'.prot.fasta'
     with open(cds_filename, 'w') as f_cds, open(prot_filename, 'w') as f_prot:
         for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
             contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
