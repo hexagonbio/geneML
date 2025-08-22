@@ -2,11 +2,20 @@ import gzip
 import os
 import sys
 
-import pandas as pd
-
 genome_id = sys.argv[1]
 path = sys.argv[2]
 data_dir = sys.argv[3]
+
+if len(sys.argv) > 4:
+    allowed_genes = set()
+    with open(sys.argv[4]) as f:
+        for line in f:
+            if line.startswith('#'):
+                continue
+            cols = line.strip().split('\t')
+            allowed_genes.add(cols[0].replace('"', ''))
+else:
+    allowed_genes = None
 
 data = {}
 inferred_contig_sizes = {}
@@ -42,7 +51,13 @@ with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f
         if skip_line:
             continue
 
-        if 'name' in info:
+        if 'ID' in info:
+            # ID=cds-XP_024343564.1 in GCF_002117355.1 gff
+            if '-' in info['ID']:
+                id = info['ID'].split('-')[1]
+            else:
+                id = info['ID']
+        elif 'name' in info:
             id = info['name']
         elif 'Parent' in info:
             id = info['Parent']  # ncbi GCA_ genomes
@@ -63,27 +78,10 @@ with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f
 for v in breakpoints.values():
     v.sort()
 
-rows = []
-for (chrom, strand, name), exons in sorted(data.items()):
-    start = min([x[0] for x in exons])
-    end = max([x[1] for x in exons])
-    rows.append(dict(
-        chrom=chrom,
-        strand=strand,
-        name=name,
-        start=start,
-        end=end,
-        length=end-start+1,
-        num_exons=len(exons),
-    ))
-genes_df = pd.DataFrame(rows)
-
-allowed_keys = set([(r.chrom, r.strand, r.name) for r in genes_df.itertuples()])
-
 with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
     for (chrom, strand, name), exons in sorted(data.items()):
 
-        if (chrom, strand, name) not in allowed_keys:
+        if allowed_genes is not None and name not in allowed_genes:
             continue
 
         # ncbi can be in reverse order for reverse strand genes
