@@ -245,7 +245,7 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
     # cds start and end, exon start and end--the more/higher the more confident we are
     cds_ends_score = 0
     for e in (gene_call[0], gene_call[-1]):
-        cds_ends_score += preds[EVENT_TYPE_MAP[e.type]][e.pos]
+        cds_ends_score += preds[EVENT_TYPE_MAP[e.type]][e.pos] / 2 # scale from range 0,2 to range 0,1
 
     gene_length_score = (gene_call[-1].pos - gene_call[0].pos) / 10000  # slight preference for longer genes
 
