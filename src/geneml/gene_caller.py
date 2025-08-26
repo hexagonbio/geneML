@@ -228,13 +228,14 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
         if last_pos is not None:
             is_exon = event_type in (CDS_END, EXON_END)
             key = MODEL_IS_EXON if is_exon else MODEL_IS_INTRON
-            # other_key = MODEL_IS_INTRON if is_exon else MODEL_IS_EXON
-            # summed_scores += np.sum(preds[key, last_pos+1:pos] > preds[other_key, last_pos+1:pos])
-            summed_scores += np.sum(preds[key, last_pos+1:pos])
+            other_key = MODEL_IS_INTRON if is_exon else MODEL_IS_EXON
+            summed_scores += np.sum(preds[key, last_pos+1:pos]-preds[other_key, last_pos+1:pos])
             summed_scores += score  # include the score of the event itself
             num_vals += pos - last_pos
         last_pos = pos
-    event_consistency_score = summed_scores / num_vals if num_vals else 0
+    event_consistency_score = 0
+    if num_vals:
+        event_consistency_score = (summed_scores / num_vals + 1) / 2 # scale from range -1,1 to range 0,1
 
     cds_seq = build_cds_seq(seq, gene_call)
     cds_is_multiple_of_three = len(cds_seq) % 3 == 0
