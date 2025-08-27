@@ -64,6 +64,30 @@ def left_pad(x: np.ndarray, pad_width: int, dtype=np.float64) -> np.ndarray:
 
 
 @njit
+def update_preds(preds: np.ndarray):
+    #Update exon_start and exon_end predictions based on is_exon and is_intron scores
+    noise_level_start = 0.2
+    noise_level_end = -0.2
+
+    exon_scores = np.maximum(preds[MODEL_IS_EXON], preds[MODEL_EXON_END])
+    intron_scores = np.maximum(preds[MODEL_IS_INTRON], preds[MODEL_EXON_START])
+    exonic = (exon_scores - intron_scores + 1) / 2
+    diff = np.diff(exonic)
+    full_diff = np.zeros(exonic.shape[0])
+    full_diff[:-1] = diff
+
+    exon_starts = np.where(full_diff >= noise_level_start,
+                            (full_diff - noise_level_start) / (1 - noise_level_start),
+                            0)
+    exon_ends = np.where(full_diff <= noise_level_end,
+                            (full_diff - noise_level_end) / (1 - noise_level_end) * -1,
+                            0)
+
+    preds[MODEL_EXON_START] = np.maximum(preds[MODEL_EXON_START], exon_starts)
+    preds[MODEL_EXON_END] = np.maximum(preds[MODEL_EXON_END], exon_ends)
+
+
+@njit
 def get_gene_ml_events(preds: np.ndarray, params: namedtuple):
     # exon_or_intron = preds[MODEL_IS_EXON] > preds[MODEL_IS_INTRON]
     # pad_size = 30
@@ -548,9 +572,11 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
     seq = seq.upper()
 
     preds = chunked_seq_predict(model, seq)
+    update_preds(preds)
     if not forward_strand_only:
         rc_seq = reverse_complement(seq)
         rc_preds = chunked_seq_predict(model, rc_seq)
+        update_preds(rc_preds)
     else:
         rc_seq = None
         rc_preds = None
