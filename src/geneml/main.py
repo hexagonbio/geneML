@@ -131,7 +131,10 @@ def process_genome(path: str, outpath: str, params: namedtuple):
 
     print('Finished processing all contigs')
 
-    basepath = os.path.splitext(outpath)[0]
+    basepath = os.path.splitext(path)[0]
+    if not outpath:
+        outpath = basepath+'.gff3'
+
     if all_segs:
         with open(basepath+'.seg', 'w') as f:
             f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
@@ -159,7 +162,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Process a genome file and output GFF coordinates.")
     parser.add_argument("input", type=str, help="Path to the input genome file.")
-    parser.add_argument("output", type=str, help="Path to the output GFF file.")
+    parser.add_argument("--output", type=str, default=None, help="Path to the output GFF file.")
     parser.add_argument('--num-cores', type=int, default=None, help="Number of cores to use for processing (default: all).")
     parser.add_argument('--model', type=str, default=None, help="Model ID or path to model file")
     parser.add_argument('--genes', type=str, nargs='?', default=None, help="Path to output gene sequences.")
