@@ -6,14 +6,37 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import silence_tensorflow.auto  # noqa: F401
 from helperlibs.bio import seqio
+from subprocess import CalledProcessError, check_output
 from tqdm import tqdm
 
+import geneml
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
+def get_git_version():
+    git_version = ""
+    try:
+        path = os.path.dirname(__file__)
+        git_version = check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=path).decode('ascii').strip()
+        status = check_output(['git', 'status', '--porcelain'], cwd=path).decode('ascii').strip()
+        changes = status.splitlines()
+        if changes:
+            git_version += "(changed)"
+    except CalledProcessError():
+        pass
+    return git_version
+
+def get_version():
+    version = geneml.__version__
+    git_version = get_git_version()
+    if git_version:
+        version += f"-{git_version}"
+    return version
+
+VERSION = get_version()
 
 def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
     """
@@ -78,7 +101,8 @@ def process_genome(params: namedtuple):
     outpath = params.output
     num_cores = params.num_cores
 
-    all_logs = [f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}']
+    all_logs = [f"geneML version {VERSION}"]
+    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}')
     genome_start_time = time.time()
 
     contigs = {}
@@ -162,7 +186,7 @@ def process_genome(params: namedtuple):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="geneML")
+    parser = argparse.ArgumentParser(description=f"geneML {VERSION}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")

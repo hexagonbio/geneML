@@ -1,6 +1,6 @@
 [project]
 name = "geneml"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Gene Annotation Across Diverse Fungal Species Using Deep Learning"
 readme = "README.md"
 authors = [
@@ -16,6 +16,7 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "biopython>=1.78",
+    "gitpython>=3.1.45",
     "helperlibs>=0.2.2",
     "numba>=0.53.1",
     "numpy>=1.21.0",
