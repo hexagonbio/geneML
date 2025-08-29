@@ -1,4 +1,5 @@
 import gc
+import git
 import os
 import time
 from collections import namedtuple
@@ -14,6 +15,15 @@ from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_f
 from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
+
+def get_git_version():
+    repo = git.Repo(search_parent_directories=True)     #TODO: If hash matches an official release, output release version
+    hash = repo.git.rev_parse(repo.head, short=True)
+    if repo.is_dirty():
+        hash += '(changed)'
+    return hash
+
+VERSION = get_git_version()
 
 def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
     """
@@ -78,7 +88,8 @@ def process_genome(params: namedtuple):
     outpath = params.output
     num_cores = params.num_cores
 
-    all_logs = [f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}']
+    all_logs = [f"geneML version {VERSION}"]
+    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}')
     genome_start_time = time.time()
 
     contigs = {}
@@ -162,7 +173,7 @@ def process_genome(params: namedtuple):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="geneML")
+    parser = argparse.ArgumentParser(description=f"geneML {VERSION}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, nargs='?', help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, nargs='?', help="Gene sequences output path (default: None).")
