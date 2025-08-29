@@ -23,9 +23,9 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'output_genes': args.genes,
         'output_proteins': args.proteins,
 
-        'num_cores': args.num_cores,
+        'num_cores': args.cores,
         'debug': args.debug,
-        'input': args.input,
+        'input': args.sequence,
         'output': args.output,
 
         'min_intron_size': args.min_intron_size,

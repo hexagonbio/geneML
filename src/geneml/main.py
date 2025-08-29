@@ -73,7 +73,9 @@ def reorder_contigs(contigs, num_cores):
     return reordered_contigs
 
 
-def process_genome(path: str, outpath: str, params: namedtuple):
+def process_genome(params: namedtuple):
+    path = params.input
+    outpath = params.output
     num_cores = params.num_cores
 
     all_logs = [f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}']
@@ -160,29 +162,29 @@ def process_genome(path: str, outpath: str, params: namedtuple):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Process a genome file and output GFF coordinates.")
-    parser.add_argument("input", type=str, help="Path to the input genome file.")
-    parser.add_argument("--output", type=str, default=None, help="Path to the output GFF file.")
-    parser.add_argument('--num-cores', type=int, default=None, help="Number of cores to use for processing (default: all).")
-    parser.add_argument('--model', type=str, default=None, help="Model ID or path to model file")
-    parser.add_argument('--genes', type=str, nargs='?', default=None, help="Path to output gene sequences.")
-    parser.add_argument('--proteins', type=str, nargs='?', default=None, help="Path to output protein sequences.")
+    parser = argparse.ArgumentParser(description="geneML")
+    parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
+    parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
+    parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")
+    parser.add_argument('-p', '--proteins', type=str, help="Protein sequences output path (default: None).")
+    parser.add_argument('-m', '--model', type=str, help="Model ID or path to model file.")
+    parser.add_argument('-c', '--cores', type=int, help="Number of cores to use for processing (default: all available).")
 
     advanced = parser.add_argument_group("advanced options")
-    advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s)")
-    advanced.add_argument('--max-intron-size', type=int, default=400, help="Maximum intron size (default: %(default)s)")
-    advanced.add_argument('--cds-start-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS start (default: %(default)s)")
-    advanced.add_argument('--cds-end-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS end (default: %(default)s)")
-    advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s)")
-    advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s)")
-    advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s)")
-    advanced.add_argument('--contigs-filter', type=str, default=None, help="Run only on selected contigs (comma separated string)")
-    advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file")
-    advanced.add_argument('--debug', action='store_true', help="Enable debug mode.")
+    advanced.add_argument('-d', '--debug', action='store_true', help="Enable debug mode.")
+    advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
+    advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
+    advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s).")
+    advanced.add_argument('--max-intron-size', type=int, default=400, help="Maximum intron size (default: %(default)s).")
+    advanced.add_argument('--cds-start-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS start (default: %(default)s).")
+    advanced.add_argument('--cds-end-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS end (default: %(default)s).")
+    advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s).")
+    advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s).")
+    advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
 
     args = parser.parse_args()
     params = build_params_namedtuple(args)
-    process_genome(args.input, args.output, params)
+    process_genome(params)
 
 
 if __name__ == "__main__":
