@@ -128,24 +128,24 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
             f.write(f'{formatted_gff_row}\n')
 
 
-def write_fastas(contigs: dict[str, str], results: dict[str, list], basepath: str):
-    line_length = 60
+def write_fasta(contigs: dict[str, str], results: dict[str, list], path: str, sequence_type: str):
+    seqs = {}
     rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
-    cds_filename = basepath+'.cds.fasta'
-    prot_filename = basepath+'.prot.fasta'
-    with open(cds_filename, 'w') as f_cds, open(prot_filename, 'w') as f_prot:
-        for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
-            contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
+    for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+        contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
+        cds_seq = build_cds_seq(contig_seq, gene_call)
+        seqs[gene_id] = cds_seq
 
-            cds_seq = build_cds_seq(contig_seq, gene_call)
-            print(f'>{gene_id}', file=f_cds)
-            for i in range(0, len(cds_seq), line_length):
-                print(cds_seq[i:i+line_length], file=f_cds)
+    if sequence_type == 'cds':
+        pass
+    elif sequence_type == 'fasta':
+        seqs = {id: translate(seq, cds=True) for id, seq in seqs.items()}
+    else:
+        raise ValueError(f"Invalid sequence type: {sequence_type}")
 
-            aa_seq = translate(cds_seq)
-            print(f'>{gene_id}', file=f_prot)
-            for i in range(0, len(aa_seq), line_length):
-                print(aa_seq[i:i+line_length], file=f_prot)
+    with open(path, 'w') as s:
+        for gene_id, seq in seqs.items():
+            s.write(f'>{gene_id}\n{seq}\n')
 
 
 @njit

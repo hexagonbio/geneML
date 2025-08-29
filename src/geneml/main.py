@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
-from geneml.outputs import build_prediction_scores_seg, write_fastas, write_gff_file
+from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
@@ -139,7 +139,10 @@ def process_genome(path: str, outpath: str, params: namedtuple):
                 f.write(f'{segs}\n')
     else:
         write_gff_file(contigs, results, outpath)
-        write_fastas(contigs, results, basepath)
+        if params.output_genes:
+            write_fasta(contigs, results, params.output_genes, sequence_type = 'cds')
+        if params.output_proteins:
+            write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
     log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
@@ -159,6 +162,8 @@ def main():
     parser.add_argument("output", type=str, help="Path to the output GFF file.")
     parser.add_argument('--num-cores', type=int, default=None, help="Number of cores to use for processing (default: all).")
     parser.add_argument('--model', type=str, default=None, help="Model ID or path to model file")
+    parser.add_argument('--genes', type=str, nargs='?', default=None, help="Path to output gene sequences.")
+    parser.add_argument('--proteins', type=str, nargs='?', default=None, help="Path to output protein sequences.")
     parser.add_argument('--sensitive', action='store_true', help="Enable sensitive mode (increases sensitivity at the cost of speed, overrides other parameter settings)")
 
     advanced = parser.add_argument_group("advanced options")
