@@ -37,13 +37,4 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'gene_candidates': args.gene_candidates,
     }
 
-    if args.sensitive:
-        params_dict.update({
-            'cds_start_min_score': 0.001,
-            'cds_end_min_score': 0.001,
-            'exon_start_min_score': 0.001,
-            'exon_end_min_score': 0.001,
-            'gene_candidates': 1000,
-        })
-
     return Params(*[params_dict[name] for name in Params._fields])

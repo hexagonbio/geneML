@@ -164,7 +164,6 @@ def main():
     parser.add_argument('--model', type=str, default=None, help="Model ID or path to model file")
     parser.add_argument('--genes', type=str, nargs='?', default=None, help="Path to output gene sequences.")
     parser.add_argument('--proteins', type=str, nargs='?', default=None, help="Path to output protein sequences.")
-    parser.add_argument('--sensitive', action='store_true', help="Enable sensitive mode (increases sensitivity at the cost of speed, overrides other parameter settings)")
 
     advanced = parser.add_argument_group("advanced options")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s)")
