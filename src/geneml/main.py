@@ -168,7 +168,7 @@ def main():
 
     advanced = parser.add_argument_group("advanced options")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s)")
-    advanced.add_argument('--max-intron-size', type=int, default=1000, help="Maximum intron size (default: %(default)s)")
+    advanced.add_argument('--max-intron-size', type=int, default=400, help="Maximum intron size (default: %(default)s)")
     advanced.add_argument('--cds-start-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS start (default: %(default)s)")
     advanced.add_argument('--cds-end-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS end (default: %(default)s)")
     advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s)")
