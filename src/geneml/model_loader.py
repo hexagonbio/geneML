@@ -13,27 +13,15 @@ MODEL_CDS_END = 4
 MODEL_IS_EXON = 5
 MODEL_IS_INTRON = 6
 
+DEFAULT_MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"../../models/geneML_default.keras"))
 
 class ResidualModelBase:
-    default_path = None
-
-    def __init__(self, path=None):
+    def __init__(self, path, context_length):
         self.specify_model_parameters()
-
-        if path is None:
-            path = self.default_path
-        # print(f"Loading model from {path}")
 
         from keras.src.saving import load_model  # keras v3
         self.model = load_model(path)
-
-        filename = os.path.basename(path)
-        # infer context length from model name
-        match = re.search(r'\d+', filename)
-        if match:
-            self.context_length = int(match.group(0))
-        else:
-            raise ValueError(f"Could not extract context length from filename: {filename}")
+        self.context_length = context_length
 
     def predict(self, seq, return_dict=True):
         x = self._one_hot_encode('N'*(self.context_length//2) + seq.upper() + 'N'*(self.context_length//2))[None, :]
@@ -70,10 +58,6 @@ class ExonIntron6ClassModel(ResidualModelBase):
     Residual model with an expanded number of classes trained on genes plus some sequence context outside of genes
     """
     def specify_model_parameters(self):
-        # self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_215basidio_jgigenepred_v10/GeneML800_c215basidio_jgigenepred_ep10.keras'
-        # self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_308ascomycota_jgigenepred_v2/GeneML800_c308ascomycota_jgigenepred_ep10.keras'
-        self.default_path = 'gs://hx-lawrence/geneml-jobs/Models/geneml_20250517_726g_jgigenepred_v4/GeneML800_c726g_jgigenepred_ep10.keras'
-
         self.annotations = [
             'none',
             'exon_start',  # splice acceptor
@@ -86,8 +70,11 @@ class ExonIntron6ClassModel(ResidualModelBase):
 
 
 @cache
-def get_cached_gene_ml_model(model_path):
-    return ExonIntron6ClassModel(path=model_path)
+def get_cached_gene_ml_model(model_path, context_length):
+    if not model_path:
+        model_path = DEFAULT_MODEL_PATH
+        context_length = 800
+    return ExonIntron6ClassModel(path=model_path, context_length=context_length)
 
 
 @register_keras_serializable()
