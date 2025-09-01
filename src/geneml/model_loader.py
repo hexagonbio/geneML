@@ -1,10 +1,8 @@
-import os
-import re
-from functools import cache
-
 import numpy as np
+import os
+from functools import cache
 from keras.src import backend
-from keras.src.saving import register_keras_serializable
+from keras.src.saving import load_model, register_keras_serializable
 
 MODEL_EXON_START = 1
 MODEL_EXON_END = 2
@@ -19,7 +17,6 @@ class ResidualModelBase:
     def __init__(self, path, context_length):
         self.specify_model_parameters()
 
-        from keras.src.saving import load_model  # keras v3
         self.model = load_model(path)
         self.context_length = context_length
 

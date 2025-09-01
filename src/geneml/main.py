@@ -1,11 +1,11 @@
+import argparse
 import gc
-import os
-import time
 import json
+import os
+import tensorflow as tf
+import time
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
-import silence_tensorflow.auto  # noqa: F401
 from helperlibs.bio import seqio
 from subprocess import CalledProcessError, check_output
 from tqdm import tqdm
@@ -47,7 +47,6 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
-    import tensorflow as tf
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
@@ -188,8 +187,6 @@ def process_genome(params: namedtuple):
 
 
 def main():
-    import argparse
-
     parser = argparse.ArgumentParser(description=f"geneML {VERSION}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
