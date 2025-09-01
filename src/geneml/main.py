@@ -1,6 +1,7 @@
 import gc
 import os
 import time
+import json
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -100,9 +101,8 @@ def process_genome(params: namedtuple):
     path = params.input
     outpath = params.output
     num_cores = params.num_cores
-
-    all_logs = [f"geneML version {VERSION}"]
-    all_logs.append(f'Processing {path} with {num_cores} cores, model_path={params.model_path}, contigs_filter={params.contigs_filter}')
+    all_logs = [f"geneML version {VERSION}", "Parameters:"]
+    all_logs.append(json.dumps(params._asdict(), indent=2))
     genome_start_time = time.time()
 
     contigs = {}
