@@ -4,7 +4,7 @@ from collections import namedtuple
 Params = namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
     'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
-    'model_path', 'forward_strand_only', 'gene_range_time_limit',
+    'model_path', 'context_length', 'forward_strand_only', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'input', 'output',
 ))
@@ -15,6 +15,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
     """
     params_dict = {
         'model_path': args.model,
+        'context_length': args.context_length,
         'forward_strand_only': False,
         'gene_range_time_limit': 300,
 
