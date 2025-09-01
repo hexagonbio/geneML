@@ -1,7 +1,6 @@
-import os
-
 import numba
 import numpy as np
+import os
 from Bio.Seq import reverse_complement, translate
 from numba import njit, objmode, typed, types
 

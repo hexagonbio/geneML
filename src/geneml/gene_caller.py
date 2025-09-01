@@ -1,8 +1,7 @@
-import time
-from collections import namedtuple
-
 import numpy as np
+import time
 from Bio.Seq import reverse_complement
+from collections import namedtuple
 from numba import njit, objmode, typed, typeof, types
 
 from geneml.model_loader import (
