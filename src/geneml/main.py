@@ -16,6 +16,10 @@ from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
 
+def check_args(parser, args):
+    if args.model and not args.context_length:
+        parser.error("--context-length is required when using a custom model.")
+
 def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
@@ -25,7 +29,7 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
     #Get model scores
-    model = get_cached_gene_ml_model(params.model_path)
+    model = get_cached_gene_ml_model(params.model_path, params.context_length)
     preds, rc_preds, seq, rc_seq = run_model(model, seq)
 
     if params.output_segs:
@@ -168,7 +172,8 @@ def main():
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")
     parser.add_argument('-p', '--proteins', type=str, help="Protein sequences output path (default: None).")
-    parser.add_argument('-m', '--model', type=str, help="Model ID or path to model file.")
+    parser.add_argument('-m', '--model', type=str, help="Path to model file (default: models/geneML_default.keras).")
+    parser.add_argument('-cl', '--context-length', type=int, help="Context length of the model.")
     parser.add_argument('-c', '--cores', type=int, help="Number of cores to use for processing (default: all available).")
 
     advanced = parser.add_argument_group("advanced options")
@@ -184,6 +189,7 @@ def main():
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
 
     args = parser.parse_args()
+    check_args(parser, args)
     params = build_params_namedtuple(args)
     process_genome(params)
 
