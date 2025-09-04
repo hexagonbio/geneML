@@ -137,8 +137,10 @@ def process_genome(params: namedtuple):
 
     print('Finished processing all contigs')
 
-    basepath = os.path.splitext(path)[0]
-    if not outpath:
+    if outpath:
+        basepath = os.path.splitext(outpath)[0]
+    else:
+        basepath = os.path.splitext(path)[0]
         outpath = basepath+'.gff3'
 
     if all_segs:
