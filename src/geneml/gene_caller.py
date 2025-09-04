@@ -24,7 +24,6 @@ CDS_END = 1
 EXON_START = 2
 EXON_END = 3
 
-# EVENT_TYPE_MAP = ('cds_start', 'cds_end', 'exon_start', 'exon_end')
 EVENT_TYPE_MAP = (MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END)
 
 GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
@@ -156,7 +155,7 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
 
 @njit
 def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
-            params: namedtuple, debug2=False) -> int:
+            params: namedtuple) -> int:
     """ Recursively attempt to build genes from the events list
     """
     num_ops = 1
@@ -169,8 +168,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
     indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params)
     for i in indices:
-        if (not debug2 and (len(results) >= params.gene_candidates or results and len(results[-1]) == 1)
-                or debug2 and len(results) >= 10000):
+        if len(results) >= params.gene_candidates or results and len(results[-1]) == 1:
             # limit the number of results to speed up
             break
 
@@ -178,15 +176,15 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         new_gene = copy_and_append_gene_event_numba(gene, event)
 
         # handle cds end
-        if gene and event.type == CDS_END and (debug2 or check_sequence_validity(new_gene, seq)):
+        if gene and event.type == CDS_END and check_sequence_validity(new_gene, seq):
             results.append(new_gene)
 
         if i + 1 >= len(events):
             break  # no more additional events to consider
 
         # handle intron start (exon end)
-        if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and (debug2 or check_sequence_validity(new_gene, seq)):
-            num_ops += recurse(results, events, i + 1, new_gene, seq, params, debug2=debug2)
+        if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and check_sequence_validity(new_gene, seq):
+            num_ops += recurse(results, events, i + 1, new_gene, seq, params)
             if num_ops > 10000:
                 marker = typed.List.empty_list(GeneEventNumbaType)
                 marker.append(event)
@@ -199,7 +197,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             if intron_size > params.max_intron_size:
                 break
             if event.type == EXON_START and intron_size >= params.min_intron_size:
-                num_ops += recurse(results, events, i + 1, new_gene, seq, params, debug2=debug2)
+                num_ops += recurse(results, events, i + 1, new_gene, seq, params)
 
     return num_ops
 
@@ -218,7 +216,7 @@ def copy_and_append_gene_event_numba(gene_def: list[GeneEventNumbaType], event: 
 
 
 @njit
-def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, debug=False):
+def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
     # look at the is_exon/is_intron scores based on the intron boundaries defined by the gene call
     last_pos = None
     summed_scores = 0
@@ -256,29 +254,6 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str, deb
         (-np.inf if num_stop_codons > 1 else 0) +
         (-np.inf if not seq_ends_with_stop_codon else 0)
     )
-
-    if debug:
-        gene_call_str_list = []
-        for c in gene_call:
-            gene_call_str_list.append(prettify_gene_event(c))
-        gene_call_str = ', '.join(gene_call_str_list)
-        with objmode(out='unicode_type'):
-            out = (
-                '{score:.3f} {event_consistency_score:.3f} {cds_ends_score:.3f} num_introns={num_introns}\n'
-                'cds_is_multiple_of_three={cds_is_multiple_of_three} num_stop_codons={num_stop_codons} seq_ends_with_stop_codon={seq_ends_with_stop_codon}\n'
-                'cds_ends_score={cds_ends_score} gene_length_score={gene_length_score}\n'
-                # 'gene_call: {gene_call_str}\n'
-            ).format(
-                    score=score, event_consistency_score=event_consistency_score, cds_ends_score=cds_ends_score,
-                    num_introns=(len(gene_call) - 2) / 2,
-                    cds_is_multiple_of_three=cds_is_multiple_of_three,
-                    num_stop_codons=num_stop_codons, seq_ends_with_stop_codon=seq_ends_with_stop_codon,
-                    gene_length_score=gene_length_score,
-                    )
-        print(out)
-        if gene_call_str == 'your gene call here':
-            print(cds_seq)
-        # print(cds_seq)
 
     return score
 
@@ -339,10 +314,6 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 @njit
 def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, params: namedtuple) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
-    debug_start_pos = None  # *************** set cds start position (0-based) to debug a specific gene call *****************
-    # debug_start_pos = 2000
-    debug2 = False
-
     function_start_time = python_time()
     start_time = python_time()
     last_end_idx = -1
@@ -350,10 +321,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
     all_best_scores = []
     for start_idx in range(len(events)):
         start_event = events[start_idx]
-        if debug_start_pos:
-            if start_event.pos != debug_start_pos:
-                continue
-            debug2 = True
 
         if start_event.type == CDS_START:
             end_idx = get_end_idx(start_idx, events, preds)
@@ -378,13 +345,11 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             # one_gene_events = events[start_idx:end_idx+1]
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
-            recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params, debug2=debug2)
+            recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
 
             if params.debug:
-                # elapsed = time.time() - start_time
                 print(start_idx, end_idx, prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
                       ';', len(gene_calls), 'gene calls',
-                      # 'in {.2f}s'.format(elapsed if elapsed > 0.1 else '')
                       )
 
             if gene_calls and len(gene_calls[-1]) == 1:
@@ -410,14 +375,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 for gene_call in gene_calls:
                     scores.append((score_gene_call(preds, gene_call, seq), gene_call))
                 scores.sort(reverse=True)
-
-                if debug2:
-                    print('gene_calls', len(gene_calls))
-                    for s in scores[:10]:
-                        gene_call = s[1]
-                        print(s)
-                        print(score_gene_call(preds, gene_call, seq, debug=True), len(gene_call), gene_call[0],
-                              gene_call[-1])
 
                 # choose just the best... revisit?
                 all_best_scores.append(scores[0])
@@ -464,7 +421,7 @@ def get_gene_range(gene_call: list[GeneEvent], is_rc: bool, sequence_length: int
 
 
 def filter_best_scored_gene_calls(sequence_length: int, all_best_scores: list[tuple[float, list[GeneEvent]]],
-                                  rc_all_best_scores: list[tuple[float, list[GeneEvent]]], debug=False):
+                                  rc_all_best_scores: list[tuple[float, list[GeneEvent]]]):
     """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
     overlapping calls, starting from highest scores first, and returns the best ones"""
 
@@ -483,24 +440,12 @@ def filter_best_scored_gene_calls(sequence_length: int, all_best_scores: list[tu
             good = False
 
         start_pos, end_pos = get_gene_range(gene_call, is_rc, sequence_length)
-        if debug and rc_all_best_scores is None and good:
-            # show all good candidate gene calls assuming this is a single gene (no reverse complement provided)
-            print(f'{good} {score:.3f} {"-" if is_rc else "+"} {min(start_pos, end_pos)}-{max(start_pos, end_pos)} {end_pos - start_pos}',
-                  get_compact_events(gene_call))
 
         if not good or np.any(seen[start_pos:end_pos]):
-            # print(f'FILTEREDOUT {good} {score:.3f} {"-" if is_rc else "+"} {min(start_pos, end_pos)}-{max(start_pos, end_pos)} {end_pos - start_pos}',
-            #       get_compact_events(gene_call))
+            # if low score or overlaps with an already seen gene call, skip it
             continue
         filtered_best_scores.append([score, gene_call, is_rc])
         seen[start_pos:end_pos] = 1 if not is_rc else 2
-
-    if debug and rc_all_best_scores:
-        print('*** final cluster gene calls ***')
-        for score, gene_call, is_rc in filtered_best_scores:
-            start_pos, end_pos = get_gene_range(gene_call, is_rc, sequence_length)
-            print(f'{score:.3f} {"-" if is_rc else "+"} {start_pos}-{end_pos} {gene_call[-1].pos - gene_call[0].pos}',
-                  get_compact_events(gene_call))
 
     return filtered_best_scores, seen
 
@@ -536,9 +481,6 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
     if params.debug:
         print('\n******************** forward strand')
     events = get_gene_ml_events(preds, params)
-    # for event in events:
-    #     if event.type == CDS_END:
-    #         print(seq[event.pos-6:event.pos+6], seq[event.pos-2:event.pos+1], event.score, event.pos)
     logs = typed.List.empty_list(types.unicode_type)
     scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', logs, params)
 
@@ -552,46 +494,8 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
         rc_scored_gene_calls = None
 
     # gene calling
-    if 0 and params.debug:
-        print('forward good events:', get_compact_events([e for e in events if e.score > 0.5]))
-        print('introns:')
-        print('starts:  GT      ')
-        for event in events:
-            if event.type == EXON_END:
-                print(f'{event.pos:<5d}', seq[event.pos-2:event.pos+6], f'{event.score:.2f}')
-        print('ends:     AG    ')
-        for event in events:
-            if event.type == EXON_START:
-                print(f'{event.pos:<5d}', seq[event.pos-6:event.pos+2], f'{event.score:.2f}')
-        if not params.forward_strand_only:
-            print('reverse good events:', get_compact_events([e for e in rc_events if e.score > 0.5]))
     sequence_length = len(seq)
     filtered_scored_gene_calls, seen = filter_best_scored_gene_calls(
-        sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls, debug=params.debug)
-
-    if params.debug and params.forward_strand_only and filtered_scored_gene_calls:
-        get_intron_site_sequence(seq, filtered_scored_gene_calls[0][1], debug=True)
+        sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls)
 
     return filtered_scored_gene_calls, logs
-
-
-def get_intron_site_sequence(seq, gene_call, debug=False) -> str:
-    lines = []
-    for i, event in enumerate(gene_call):
-        if event.type == CDS_START:
-            lines.append((f'cds start ({event.pos}):', seq[event.pos:event.pos + 3]))
-            #              intron  2037- 2086: CATGTGCG ACTCAGCA')
-            lines.append(('intron consensus:      GTagt    cAGg  __scores_ size',))
-        if event.type == CDS_END:
-            lines.append((f'cds end ({event.pos}):', seq[event.pos-2:event.pos+1]))
-        if event.type == EXON_END and i < len(gene_call) - 1:
-            event2 = gene_call[i+1]
-            lines.append((f'intron {event.pos:5d}-{event2.pos:<5d}:',
-                          seq[event.pos-2:event.pos + 6], seq[event2.pos-6:event2.pos+2],
-                          f'{event.score:.2f} {event2.score:.2f} {event2.pos - event.pos:<4d}'))
-
-    if debug:
-        for line in lines:
-            print(*line)
-
-    return '\n'.join(' '.join(map(str, line)) for line in lines)
