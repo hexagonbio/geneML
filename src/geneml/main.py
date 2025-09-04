@@ -188,7 +188,7 @@ def process_genome(params: namedtuple):
             f.write(f'{log}\n')
 
 
-def main():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=f"geneML {VERSION}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
@@ -210,8 +210,14 @@ def main():
     advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s).")
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     check_args(parser, args)
+
+    return args
+
+
+def main():
+    args = parse_args()
     params = build_params_namedtuple(args)
     process_genome(params)
 

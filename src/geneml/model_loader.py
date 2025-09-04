@@ -67,7 +67,7 @@ class ExonIntron6ClassModel(ResidualModelBase):
 
 
 @cache
-def get_cached_gene_ml_model(model_path, context_length):
+def get_cached_gene_ml_model(model_path, context_length=None):
     if not model_path:
         model_path = DEFAULT_MODEL_PATH
         context_length = 800
