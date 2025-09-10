@@ -112,11 +112,15 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
     gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
-    for contig_id, seq in contigs.items():
-        region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
-        all_gff_rows.append((region_header,))
 
+    last_contig_id = None
     for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+        if contig_id != last_contig_id:
+            last_contig_id = contig_id
+            seq = contigs[contig_id]
+            region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
+            all_gff_rows.append((region_header,))
+
         all_gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, is_rc))
 
     if dirname := os.path.dirname(outpath):
