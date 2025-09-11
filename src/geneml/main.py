@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from helperlibs.bio import seqio
 from tqdm import tqdm
 
+from geneml import __version__
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
@@ -81,7 +82,7 @@ def process_genome(params: namedtuple):
     path = params.input
     outpath = params.output
     num_cores = params.num_cores
-    all_logs = [f"geneML", "Parameters:"]
+    all_logs = [f"geneML version {__version__}", "Parameters:"]
     all_logs.append(json.dumps(params._asdict(), indent=2))
     genome_start_time = time.time()
 
@@ -166,7 +167,7 @@ def process_genome(params: namedtuple):
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=f"geneML")
+    parser = argparse.ArgumentParser(description=f"geneML {__version__}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")
