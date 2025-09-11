@@ -2,10 +2,11 @@ import argparse
 import gc
 import json
 import os
-import tensorflow as tf
 import time
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+import tensorflow as tf
 from helperlibs.bio import seqio
 from tqdm import tqdm
 
