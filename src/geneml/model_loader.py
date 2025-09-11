@@ -1,6 +1,7 @@
-import numpy as np
 import os
 from functools import cache
+
+import numpy as np
 from keras.src import backend
 from keras.src.saving import load_model, register_keras_serializable
 
