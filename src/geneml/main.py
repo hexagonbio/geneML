@@ -7,37 +7,15 @@ import time
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from helperlibs.bio import seqio
-from subprocess import CalledProcessError, check_output
 from tqdm import tqdm
 
-import geneml
+from geneml import __version__
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
-def get_git_version():
-    git_version = ""
-    try:
-        path = os.path.dirname(__file__)
-        git_version = check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=path).decode('ascii').strip()
-        status = check_output(['git', 'status', '--porcelain'], cwd=path).decode('ascii').strip()
-        changes = status.splitlines()
-        if changes:
-            git_version += "(changed)"
-    except CalledProcessError():
-        pass
-    return git_version
-
-def get_version():
-    version = geneml.__version__
-    git_version = get_git_version()
-    if git_version:
-        version += f"-{git_version}"
-    return version
-
-VERSION = get_version()
 
 def check_args(parser, args):
     if args.model and not args.context_length:
@@ -104,7 +82,7 @@ def process_genome(params: namedtuple):
     path = params.input
     outpath = params.output
     num_cores = params.num_cores
-    all_logs = [f"geneML version {VERSION}", "Parameters:"]
+    all_logs = [f"geneML version {__version__}", "Parameters:"]
     all_logs.append(json.dumps(params._asdict(), indent=2))
     genome_start_time = time.time()
 
@@ -189,7 +167,7 @@ def process_genome(params: namedtuple):
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=f"geneML {VERSION}")
+    parser = argparse.ArgumentParser(description=f"geneML {__version__}")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")

@@ -1,6 +1,5 @@
 [project]
 name = "geneml"
-dynamic = ["version"]
 description = "Gene Annotation Across Diverse Fungal Species Using Deep Learning"
 readme = "README.md"
 authors = [
@@ -16,7 +15,6 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "biopython>=1.78",
-    "gitpython>=3.1.44",
     "helperlibs>=0.2.2",
     "numba>=0.53.1",
     "numpy>=1.21.0",
@@ -31,6 +29,7 @@ license = "GPL-3.0-only"
 license-files = [
     "LICENSE",
 ]
+dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/hexagonbio/geneML"
@@ -39,12 +38,23 @@ Repository = "https://github.com/hexagonbio/geneML"
 geneml = "geneml.main:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27.0", "hatch-vcs>=0.5.0"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
     "ruff>=0.11.12",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/geneml/_version.py"
+
+[tool.hatch.build]
+artifacts = [
+    "src/geneml/_version.py",
 ]
 
 [tool.ruff]
