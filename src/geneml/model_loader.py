@@ -11,7 +11,7 @@ MODEL_CDS_END = 4
 MODEL_IS_EXON = 5
 MODEL_IS_INTRON = 6
 
-DEFAULT_MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"../../models/geneML_default.keras"))
+DEFAULT_MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "models/geneML_default.keras"))
 
 class ResidualModelBase:
     def __init__(self, path, context_length):
