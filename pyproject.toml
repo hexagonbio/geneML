@@ -57,6 +57,13 @@ artifacts = [
     "src/geneml/_version.py",
 ]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/.idea",
+    "/.vscode",
+]
+
 [tool.ruff]
 line-length = 120
 
