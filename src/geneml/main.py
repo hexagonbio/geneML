@@ -1,6 +1,7 @@
 import argparse
 import gc
 import json
+import logging
 import os
 import time
 from collections import namedtuple
@@ -17,6 +18,31 @@ from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_f
 from geneml.params import build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
+logger = logging.getLogger("geneml")
+
+def setup_logger(logfile, debug = False, verbose = False):
+    log_format = '%(levelname)-8s %(asctime)s   %(message)s'
+    date_format = "%d/%m %H:%M:%S"
+
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+
+    log_level_logfile = logging.INFO
+    log_level_stdout = logging.WARNING
+    if debug:
+        log_level_stdout = logging.DEBUG
+    elif verbose:
+        log_level_stdout = logging.INFO
+
+    file_handler = logging.FileHandler(logfile, mode='w')
+    file_handler.setLevel(log_level_logfile)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(log_level_stdout)
+
+    formatter = logging.Formatter(log_format, datefmt=date_format)
+    for handler in file_handler, stream_handler:
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
 def check_args(parser, args):
     if args.model and not args.context_length:
@@ -37,7 +63,7 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
         return contig_id, [], [], segs
 
-    filtered_scored_gene_calls, logs = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
+    filtered_scored_gene_calls = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     rebuilt_results = []
     for score, gene_call, is_rc in filtered_scored_gene_calls:
@@ -48,16 +74,14 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
                 continue  # skip exon end if followed by cds end
             rebuilt_gene_call.append(GeneEvent(pos=event.pos, type=event.type, score=event.score))
         rebuilt_results.append([score, rebuilt_gene_call, is_rc])
-    rebuilt_logs = [str(log) for log in logs]
 
     # explicitly clean up memory after finishing a contig
     del preds
     del rc_preds
     del filtered_scored_gene_calls
-    del logs
     gc.collect()
 
-    return contig_id, rebuilt_results, rebuilt_logs, None
+    return contig_id, rebuilt_results, None
 
 
 def reorder_contigs(contigs, num_cores):
@@ -83,8 +107,9 @@ def process_genome(params: namedtuple):
     path = params.input
     outpath = params.output
     num_cores = params.num_cores
-    all_logs = [f"geneML version {__version__}", "Parameters:"]
-    all_logs.append(json.dumps(params._asdict(), indent=2))
+    logger.info(f"Running geneML version {__version__}")
+    parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
+    logger.info(parameter_info)
     genome_start_time = time.time()
 
     contigs = {}
@@ -97,10 +122,7 @@ def process_genome(params: namedtuple):
 
     if num_cores is None:
         num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
-        log = f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count or "all available"}'
-        all_logs.append(log)
-        if num_cores > 1:
-            print(log)
+        logger.info(f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count or "all available"}')
     else:
         tensorflow_thread_count = None
 
@@ -109,17 +131,16 @@ def process_genome(params: namedtuple):
     results = {}
     all_segs = []
     if num_cores == 1:
-        print('Running from main thread, parallelism only for tensorflow')
+        logger.info('Running from main thread, parallelism only for tensorflow')
         for contig_id, seq in reordered_contigs:
-            print(f'Processing contig {contig_id} of size {len(seq)}')
+            logger.info(f'Processing contig {contig_id} of size {len(seq)}')
             start_time = time.time()
-            _, r, logs, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
+            _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
             results[contig_id] = r
-            all_logs.extend(logs)
             if segs:
                 all_segs.append(segs)
             elapsed = time.time() - start_time
-            print(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
+            logger.info(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
     else:
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
@@ -132,12 +153,9 @@ def process_genome(params: namedtuple):
                 for future in as_completed(future_to_args):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
-
-                    _, r, logs, _ = future.result()
-                    all_logs.extend(logs)
                     results[contig_id] = r
 
-    print('Finished processing all contigs')
+    logger.info('Finished processing all contigs')
 
     if outpath:
         basepath = os.path.splitext(outpath)[0]
@@ -158,14 +176,7 @@ def process_genome(params: namedtuple):
             write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
-    log = f'Finished processing {path}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes'
-    print(log)
-    all_logs.append(log)
-
-    with open(basepath + '.log', 'w') as f:
-        for log in all_logs:
-            f.write(f'{log}\n')
-
+    logger.info(f'Finished processing {params.input}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes')
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=f"geneML {__version__}")
@@ -178,6 +189,7 @@ def parse_args(argv=None):
     parser.add_argument('-c', '--cores', type=int, help="Number of cores to use for processing (default: all available).")
 
     advanced = parser.add_argument_group("advanced options")
+    advanced.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode.")
     advanced.add_argument('-d', '--debug', action='store_true', help="Enable debug mode.")
     advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
@@ -198,6 +210,8 @@ def parse_args(argv=None):
 def main():
     args = parse_args()
     params = build_params_namedtuple(args)
+    logfile = ''.join([os.path.splitext(params.input)[0], '.log'])
+    setup_logger(logfile, debug = params.debug, verbose= params.verbose)
     process_genome(params)
 
 

@@ -6,7 +6,7 @@ Params = namedtuple('Params', (
     'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
     'model_path', 'context_length', 'forward_strand_only', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
-    'num_cores', 'debug', 'input', 'output',
+    'num_cores', 'debug', 'verbose', 'input', 'output',
 ))
 
 def build_params_namedtuple(args: Namespace) -> Params:
@@ -26,6 +26,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
 
         'num_cores': args.cores,
         'debug': args.debug,
+        'verbose': args.verbose,
         'input': args.sequence,
         'output': args.output,
 

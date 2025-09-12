@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 
 import numpy as np
@@ -5,6 +6,7 @@ import psutil
 
 from geneml.model_loader import ResidualModelBase
 
+logger = logging.getLogger("geneml")
 
 def chunked_seq_predict(model: ResidualModelBase, seq: str, chunk_size=100000, padding=1000):
     """
@@ -30,7 +32,7 @@ def compute_optimal_num_parallelism(num_contigs) -> tuple[int, int | None]:
     gb_available = psutil.virtual_memory().available / (1024 * 1024 * 1024)
 
     if gb_available < 8:
-        print(f'WARNING: Detected a low available memory environment: {gb_available:.2f} GB available. Setting num_cores to 1.')
+        logger.warning(f'Detected a low available memory environment: {gb_available:.2f} GB available. Setting num_cores to 1.')
         num_cores = 1
     elif gb_available < 32:
         gb_per_process = 5.0

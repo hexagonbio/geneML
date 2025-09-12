@@ -1,3 +1,5 @@
+import logging
+import numpy as np
 import time
 from collections import namedtuple
 
@@ -16,6 +18,8 @@ from geneml.model_loader import (
 )
 from geneml.params import Params
 from geneml.utils import chunked_seq_predict
+
+logger = logging.getLogger("geneml")
 
 # using dataclass would be nice, but numba doesn't support it
 GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])
@@ -313,7 +317,7 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, logs: list, params: namedtuple) -> list[tuple[float, list[GeneEvent]]]:
+def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, params: namedtuple) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     function_start_time = python_time()
     start_time = python_time()
@@ -349,20 +353,22 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
 
             if params.debug:
-                print(start_idx, end_idx, prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
-                      ';', len(gene_calls), 'gene calls',
-                      )
+                with objmode:
+                    log = ' '.join([str(start_idx), str(end_idx), prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
+                      ';', str(len(gene_calls)), 'gene calls',
+                      ])
+                    logger.debug(log)
 
             if gene_calls and len(gene_calls[-1]) == 1:
                 # this is a marker for too many ops
                 elapsed = python_time() - recurse_start_time
-                with objmode(log='unicode_type'):
+                with objmode():
                     log = ' '.join([
                         'too many ops for', contig_id, str(start_idx), str(end_idx),
                         prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
                         prettify_gene_event(gene_calls[-1][0]),
                         '; elapsed time:', str(np.round(elapsed, 2))])
-                logs.append(log)
+                    logger.warning(log)
 
                 # remove the last gene call marker
                 gene_calls = gene_calls[:-1]
@@ -381,9 +387,10 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 all_best_scores.append(scores[0])
 
             if params.gene_range_time_limit and python_time() - start_time > params.gene_range_time_limit:
-                log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
+                with objmode():
+                    log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
                                 prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
-                logs.append(log)
+                    logger.warning(log)
 
                 # short circuit this gene region
                 skip_till_next_end_idx = True
@@ -391,9 +398,9 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
 
     elapsed = python_time() - function_start_time
     if elapsed > 600:
-        with objmode(log='unicode_type'):
+        with objmode():
             log = 'slow {contig_id} at {elapsed:.2f}s'.format(contig_id=contig_id, elapsed=elapsed)
-        logs.append(log)
+            logger.warning(log)
 
     return all_best_scores
 
@@ -479,17 +486,14 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
 
 
 def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str, contig_id: str, params: namedtuple):
-    if params.debug:
-        print('\n******************** forward strand')
     events = get_gene_ml_events(preds, params)
-    logs = typed.List.empty_list(types.unicode_type)
-    scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', logs, params)
+    logger.debug("Processing forward strand")
+    scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
 
     if not params.forward_strand_only:
-        if params.debug:
-            print('\n******************** reverse strand')
         rc_events = get_gene_ml_events(rc_preds, params)
-        rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', logs, params)
+        logger.debug("Processing reverse strand")
+        rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
     else:
         rc_events = None
         rc_scored_gene_calls = None
@@ -499,4 +503,4 @@ def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: 
     filtered_scored_gene_calls, seen = filter_best_scored_gene_calls(
         sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls)
 
-    return filtered_scored_gene_calls, logs
+    return filtered_scored_gene_calls
