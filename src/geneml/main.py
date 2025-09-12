@@ -104,8 +104,6 @@ def reorder_contigs(contigs, num_cores):
 
 
 def process_genome(params: namedtuple):
-    path = params.input
-    outpath = params.output
     num_cores = params.num_cores
     logger.info(f"Running geneML version {__version__}")
     parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
@@ -114,7 +112,7 @@ def process_genome(params: namedtuple):
 
     contigs = {}
     genome_size = 0
-    for record in seqio.parse(path):
+    for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
         contigs[record.id] = str(record.seq).upper()
@@ -149,7 +147,7 @@ def process_genome(params: namedtuple):
                 future_to_args[future] = contig_id, len(seq)
 
             with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
-                progress.set_description(f'Processing {path}')
+                progress.set_description(f'Processing {params.inpath}')
                 for future in as_completed(future_to_args):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
@@ -157,26 +155,20 @@ def process_genome(params: namedtuple):
 
     logger.info('Finished processing all contigs')
 
-    if outpath:
-        basepath = os.path.splitext(outpath)[0]
-    else:
-        basepath = os.path.splitext(path)[0]
-        outpath = basepath+'.gff3'
-
     if all_segs:
-        with open(basepath+'.seg', 'w') as f:
+        with open(params.basepath+'.seg', 'w') as f:
             f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
             for segs in all_segs:
                 f.write(f'{segs}\n')
     else:
-        write_gff_file(contigs, results, outpath)
+        write_gff_file(contigs, results, params.outpath)
         if params.output_genes:
             write_fasta(contigs, results, params.output_genes, sequence_type = 'cds')
         if params.output_proteins:
             write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
-    logger.info(f'Finished processing {params.input}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes')
+    logger.info(f'Finished processing {params.inpath}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes')
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=f"geneML {__version__}")
@@ -210,7 +202,7 @@ def parse_args(argv=None):
 def main():
     args = parse_args()
     params = build_params_namedtuple(args)
-    logfile = ''.join([os.path.splitext(params.input)[0], '.log'])
+    logfile = ''.join([params.basepath, '.log'])
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
     process_genome(params)
 
