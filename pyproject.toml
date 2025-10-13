@@ -72,4 +72,4 @@ select = ["E", "W", "F", "I"]
 ignore = ["E501"]
 
 [tool.uv]
-required-version = ">=0.8.5,<0.9.0"
+required-version = ">=0.8.5"
