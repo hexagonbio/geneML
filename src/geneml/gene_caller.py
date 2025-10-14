@@ -1,11 +1,10 @@
 import logging
-import numpy as np
 import time
 from collections import namedtuple
 
 import numpy as np
 from Bio.Seq import reverse_complement
-from numba import njit, objmode, typed, typeof, types
+from numba import njit, objmode, typed, typeof
 
 from geneml.model_loader import (
     MODEL_CDS_END,

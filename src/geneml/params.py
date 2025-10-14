@@ -1,5 +1,4 @@
 import os
-
 from argparse import Namespace
 from collections import namedtuple
 
@@ -11,10 +10,12 @@ Params = namedtuple('Params', (
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
 ))
 
+
 def get_basepath(inpath, outpath):
     if outpath:
         return os.path.splitext(outpath)[0]
     return os.path.splitext(inpath)[0]
+
 
 def build_params_namedtuple(args: Namespace) -> Params:
     """

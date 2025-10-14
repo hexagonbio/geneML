@@ -2,9 +2,7 @@ import argparse
 import gc
 import json
 import logging
-import os
 import time
-from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import tensorflow as tf
@@ -15,10 +13,11 @@ from geneml import __version__
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
-from geneml.params import build_params_namedtuple
+from geneml.params import Params, build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism
 
 logger = logging.getLogger("geneml")
+
 
 def setup_logger(logfile, debug = False, verbose = False):
     log_format = '%(levelname)-8s %(asctime)s   %(message)s'
@@ -48,7 +47,7 @@ def check_args(parser, args):
     if args.model and not args.context_length:
         parser.error("--context-length is required when using a custom model.")
 
-def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], list[str], str]:
+def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], str | None]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
@@ -61,7 +60,7 @@ def process_contig(contig_id: str, seq: str, params: namedtuple, tensorflow_thre
 
     if params.output_segs:
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
-        return contig_id, [], [], segs
+        return contig_id, [], segs
 
     filtered_scored_gene_calls = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
 
@@ -103,7 +102,7 @@ def reorder_contigs(contigs, num_cores):
     return reordered_contigs
 
 
-def process_genome(params: namedtuple):
+def process_genome(params: Params):
     num_cores = params.num_cores
     logger.info(f"Running geneML version {__version__}")
     parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
@@ -169,6 +168,7 @@ def process_genome(params: namedtuple):
 
     elapsed = time.time() - genome_start_time
     logger.info(f'Finished processing {params.inpath}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes')
+
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=f"geneML {__version__}")
