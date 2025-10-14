@@ -150,6 +150,7 @@ def process_genome(params: Params):
                 for future in as_completed(future_to_args):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
+                    _, r, _ = future.result()
                     results[contig_id] = r
 
     logger.info('Finished processing all contigs')
