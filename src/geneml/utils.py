@@ -13,7 +13,6 @@ def chunked_seq_predict(model: ResidualModelBase, seq: str, chunk_size=100000, p
     Predicts the sequence in chunks of a given size to control memory usage, with some padding to handle
     the sequence context
     """
-    seq = seq.upper()
     seq_len = len(seq)
     pred_list = []
     for i in range(0, seq_len, chunk_size):

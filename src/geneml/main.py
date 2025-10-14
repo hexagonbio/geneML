@@ -83,7 +83,7 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     return contig_id, rebuilt_results, None
 
 
-def reorder_contigs(contigs, num_cores):
+def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
     """
     Reorders contigs by size to balance the workload across processes.
     """
@@ -114,7 +114,7 @@ def process_genome(params: Params):
     for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
-        contigs[record.id] = str(record.seq).upper()
+        contigs[record.id] = str(record.seq)
         genome_size += len(record.seq)
 
     if num_cores is None:

@@ -264,7 +264,7 @@ def build_cds_seq(seq: str, gene_call: list[GeneEvent]):
             # gene_ml cds_end and exon_end predictions have off by one issue
             cds_seq_list.append(seq[last_pos:pos+1])
             last_pos = pos+1
-    return ''.join(cds_seq_list)
+    return ''.join(cds_seq_list).upper()
 
 
 @njit
@@ -457,8 +457,6 @@ def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> 
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
     sequence. See build_coords for converting to genomic absolute coordinates.
     """
-
-    seq = seq.upper()
 
     preds = chunked_seq_predict(model, seq)
     if not forward_strand_only:
