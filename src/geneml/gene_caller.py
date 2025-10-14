@@ -136,13 +136,6 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
         candidate_exon_end_indices = [i for i, e in enumerated_events[start_idx:] if e.type == EXON_END and e.score > 0.2]
         candidate_exon_end_indices = candidate_exon_end_indices[:2]
         priority_indices = candidate_exon_end_indices
-
-        # TODO: want to make sure some cds_end events are considered early, but for some reason this makes a lot of genes disappear
-        # if len(gene) <= 3:
-        #     candidate_cds_end_enumerated_events = [(i, e) for i, e in enumerated_events[start_idx:] if e.type == CDS_END]
-        #     candidate_cds_end_enumerated_events.sort(key=lambda x: x[1].score, reverse=True)
-        #     priority_indices = [i for i, e in candidate_cds_end_enumerated_events[:5]] + priority_indices
-
     elif gene[-1].type == EXON_END:
         end_idx = start_idx
         while events[end_idx].pos < gene[-1].pos + params.max_intron_size and end_idx < len(events) - 1:
@@ -213,8 +206,6 @@ def copy_and_append_gene_event_numba(gene_def: list[GeneEventNumbaType], event: 
     new_gene_def = typed.List.empty_list(GeneEventNumbaType)
     for e in gene_def:
         new_gene_def.append(e)
-    #     print(f'{type(e)=}')
-    # print(f'{type(event)=}')
     new_gene_def.append(event)
     return new_gene_def
 
@@ -282,14 +273,11 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
     performance
     """
 
-    # region_size = events[-1].pos - events[0].pos
-    # max_num_event_per_type = region_size // 200  # maybe an intron every 400 bp, and allow two possibilities for each
-    # max_num_event_per_type = max_num_event_per_type * 2 + 5  # scale up
     num_intron_events = 0
     for e in events:
         if e.type in (EXON_START, EXON_END) and e.score > 0.1:
             num_intron_events += 1
-    max_num_event_per_type = int(num_intron_events)  # * 2/3)
+    max_num_event_per_type = int(num_intron_events)
 
     event_subset = typed.List.empty_list(GeneEventNumbaType)
 
@@ -346,7 +334,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 continue
 
             one_gene_events = filter_events_for_one_gene(events[start_idx:end_idx+1])
-            # one_gene_events = events[start_idx:end_idx+1]
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
             recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
