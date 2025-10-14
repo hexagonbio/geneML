@@ -172,7 +172,9 @@ def process_genome(params: Params):
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=f"geneML {__version__}")
+    version_string = f"geneML {__version__}"
+    parser = argparse.ArgumentParser(description=version_string)
+    parser.add_argument('--version', action='version', version=version_string, help="Show version number and exit.")
     parser.add_argument('sequence', type=str, help="Sequence file in FASTA/GenBank/EMBL format.")
     parser.add_argument('-o', '--output', type=str, help="Gene annotations output path (default: based on input filename).")
     parser.add_argument('-g', '--genes', type=str, help="Gene sequences output path (default: None).")
