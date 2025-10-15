@@ -14,7 +14,7 @@ from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, r
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.params import Params, build_params_namedtuple
-from geneml.utils import compute_optimal_num_parallelism
+from geneml.utils import compute_optimal_num_parallelism, mask_lowercase_stretches
 
 logger = logging.getLogger("geneml")
 
@@ -114,8 +114,11 @@ def process_genome(params: Params):
     for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
-        contigs[record.id] = str(record.seq)
-        genome_size += len(record.seq)
+        seq = str(record.seq)
+        if params.hardmask_repeats_min_size is not None and params.hardmask_repeats_min_size > 0:
+            seq = mask_lowercase_stretches(seq, min_length=params.hardmask_repeats_min_size)
+        contigs[record.id] = seq
+        genome_size += len(seq)
 
     if num_cores is None:
         num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
@@ -196,6 +199,7 @@ def parse_args(argv=None):
     advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s).")
     advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s).")
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
+    advanced.add_argument('--hardmask-repeats-min-size', type=int, default=200, help="Minimum size of softmasked repeat stretches to hardmask (default: %(default)s).")
 
     args = parser.parse_args(argv)
     check_args(parser, args)

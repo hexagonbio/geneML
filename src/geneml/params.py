@@ -8,6 +8,7 @@ Params = namedtuple('Params', (
     'model_path', 'context_length', 'forward_strand_only', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
+    'hardmask_repeats_min_size',
 ))
 
 
@@ -47,6 +48,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'exon_start_min_score': args.exon_start_min_score,
         'exon_end_min_score': args.exon_end_min_score,
         'gene_candidates': args.gene_candidates,
+        'hardmask_repeats_min_size': args.hardmask_repeats_min_size,
     }
 
     return Params(*[params_dict[name] for name in Params._fields])

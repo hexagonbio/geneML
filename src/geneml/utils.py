@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import re
 
 import numpy as np
 import psutil
@@ -47,3 +48,17 @@ def compute_optimal_num_parallelism(num_contigs) -> tuple[int, int | None]:
         return total_cores, tensorflow_thread_count
     else:
         return num_cores, None
+
+
+def mask_lowercase_stretches(seq, min_length=200):
+    """ hardmask dna sequence ranges that have lowercase (softmasked repeats) stretches longer than the
+    specified min_length"""
+
+    pattern = fr'[acgt]{{{min_length},}}'
+
+    def replace_with_ns(match):
+        # match.group(0) is the entire matched string
+        stretch_length = len(match.group(0))
+        return 'N' * stretch_length
+
+    return re.sub(pattern, replace_with_ns, seq)
