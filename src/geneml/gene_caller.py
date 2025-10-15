@@ -81,7 +81,6 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
                 break
         pos += 1
 
-    # print(start_pos, pos)
     for i in range(start_idx, len(events)):
         if events[i].pos >= pos:
             return i
@@ -90,6 +89,7 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
 
 @njit
 def count_stop_codons(seq):
+    # note: assumes seq is all uppercase
     count = 0
     for i in range(0, len(seq) - 2, 3):
         codon = seq[i:i+3]
@@ -100,6 +100,7 @@ def count_stop_codons(seq):
 
 @njit
 def ends_with_stop_codon(seq):
+    # note: assumes seq is all uppercase
     if len(seq) < 3:
         return False
     codon = seq[-3:]
