@@ -2,6 +2,7 @@ import argparse
 import gc
 import json
 import logging
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -46,6 +47,12 @@ def setup_logger(logfile, debug = False, verbose = False):
 def check_args(parser, args):
     if args.model and not args.context_length:
         parser.error("--context-length is required when using a custom model.")
+
+def write_setup_info(params):
+    logger.info("Running geneML version %s", __version__)
+    logger.info("Command line: %s", " ".join(sys.argv[1:]))
+    parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
+    logger.info(parameter_info)
 
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], str | None]:
     """
@@ -104,9 +111,6 @@ def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
 
 def process_genome(params: Params):
     num_cores = params.num_cores
-    logger.info(f"Running geneML version {__version__}")
-    parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
-    logger.info(parameter_info)
     genome_start_time = time.time()
 
     contigs = {}
@@ -213,6 +217,7 @@ def main():
     params = build_params_namedtuple(args)
     logfile = ''.join([params.basepath, '.log'])
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
+    write_setup_info(params)
     process_genome(params)
 
 
