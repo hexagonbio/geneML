@@ -28,7 +28,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'model_path': args.model,
         'context_length': args.context_length,
         'forward_strand_only': False,
-        'gene_range_time_limit': np.inf,
+        'gene_range_time_limit': np.inf if args.gene_range_time_limit is None else args.gene_range_time_limit,
 
         'contigs_filter': args.contigs_filter.split(',') if args.contigs_filter else None,
         'output_segs': args.write_raw_scores,

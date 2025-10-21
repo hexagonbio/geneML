@@ -199,6 +199,7 @@ def parse_args(argv=None):
     advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s).")
     advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s).")
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
+    advanced.add_argument('--gene-range-time-limit', type=int, default=None, help="Time limit for each gene prediction, in seconds (default: %(default)s)")
     advanced.add_argument('--hardmask-repeats-min-size', type=int, default=None, help="Minimum size of softmasked repeat stretches to hardmask (default: %(default)s).")
 
     args = parser.parse_args(argv)
