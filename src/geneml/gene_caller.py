@@ -373,7 +373,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 # choose just the best... revisit?
                 all_best_scores.append(scores[0])
 
-            if params.gene_range_time_limit and python_time() - start_time > params.gene_range_time_limit:
+            if python_time() - start_time > params.gene_range_time_limit:
                 with objmode():
                     log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
                                 prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
