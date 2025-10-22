@@ -8,12 +8,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import tensorflow as tf
 from helperlibs.bio import seqio
 from tqdm import tqdm
+from Bio.Seq import reverse_complement
 
 from geneml import __version__
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
-from geneml.params import Params, build_params_namedtuple
+from geneml.params import Strand, Params, build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism, mask_lowercase_stretches
 
 logger = logging.getLogger("geneml")
@@ -69,7 +70,16 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
 
     #Get model scores
     model = get_cached_gene_ml_model(params.model_path, params.context_length)
-    preds, rc_preds, seq, rc_seq = run_model(model, seq)
+
+    preds = None
+    rc_preds = None
+    rc_seq = None
+    if params.strand is not Strand.REVERSE:
+        preds = run_model(model, seq)
+
+    if params.strand is not Strand.FORWARD:
+        rc_seq = reverse_complement(seq)
+        rc_preds = run_model(model, rc_seq)
 
     if params.output_segs:
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
@@ -200,6 +210,7 @@ def parse_args(argv=None):
     advanced = parser.add_argument_group("advanced options")
     advanced.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode.")
     advanced.add_argument('-d', '--debug', action='store_true', help="Enable debug mode.")
+    advanced.add_argument('--strand', type=str, choices=[x.value for x in Strand], default='both', help="On which strand to predict genes (default: %(default)s).")
     advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s).")

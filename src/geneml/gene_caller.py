@@ -1,9 +1,9 @@
 import logging
 import time
 from collections import namedtuple
+from typing import Optional
 
 import numpy as np
-from Bio.Seq import reverse_complement
 from numba import njit, objmode, typed, typeof
 
 from geneml.model_loader import (
@@ -415,15 +415,16 @@ def get_gene_range(gene_call: list[GeneEvent], is_rc: bool, sequence_length: int
     return start_pos, end_pos
 
 
-def filter_best_scored_gene_calls(sequence_length: int, all_best_scores: list[tuple[float, list[GeneEvent]]],
-                                  rc_all_best_scores: list[tuple[float, list[GeneEvent]]]):
+def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[list[tuple[float, list[GeneEvent]]]],
+                                  rc_best_scores: Optional[list[tuple[float, list[GeneEvent]]]]):
     """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
     overlapping calls, starting from highest scores first, and returns the best ones"""
 
-    # setup reverse complement calls if applicable
-    all_best_scores = [(score, gene_call, False) for score, gene_call in all_best_scores]
-    if rc_all_best_scores is not None:
-        all_best_scores += [(score, gene_call, True) for score, gene_call in rc_all_best_scores]
+    all_best_scores = []
+    if best_scores:
+        all_best_scores = [(score, gene_call, False) for score, gene_call in best_scores]
+    if rc_best_scores:
+        all_best_scores += [(score, gene_call, True) for score, gene_call in rc_best_scores]
     all_best_scores.sort(reverse=True)
 
     seen = np.zeros(sequence_length, dtype='int8')
@@ -452,40 +453,35 @@ def build_coords(gene_call: list[GeneEvent], offset: int, width: int, reverse_co
         return offset+(width-gene_call[-1].pos), offset+(width-gene_call[0].pos), '-'
 
 
-def run_model(model: ResidualModelBase, seq: str, forward_strand_only=False) -> tuple[np.ndarray, np.ndarray, str, str]:
+def run_model(model: ResidualModelBase, seq: str) -> tuple[np.ndarray, np.ndarray, str, str]:
     """
     Build gene calls from a sequence using the GeneML model. Note that the coordinates in filtered_scored_gene_calls are
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
     sequence. See build_coords for converting to genomic absolute coordinates.
     """
-
-    preds = chunked_seq_predict(model, seq)
-    if not forward_strand_only:
-        rc_seq = reverse_complement(seq)
-        rc_preds = chunked_seq_predict(model, rc_seq)
-    else:
-        rc_seq = None
-        rc_preds = None
-
-    return preds, rc_preds, seq, rc_seq
+    return chunked_seq_predict(model, seq)
 
 
-def build_gene_calls(preds: np.ndarray, rc_preds: np.ndarray, seq: str, rc_seq: str, contig_id: str, params: namedtuple):
-    events = get_gene_ml_events(preds, params)
-    logger.debug("Processing forward strand")
-    scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
+def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray],
+                     seq: str, rc_seq: Optional[str], contig_id: str, params: namedtuple):
+    if preds is None and rc_preds is None:
+        raise ValueError("Cannot build gene calls without any model predictions.")
 
-    if not params.forward_strand_only:
+    scored_gene_calls = None
+    rc_scored_gene_calls = None
+    if preds is not None:
+        logger.info("Processing forward strand")
+        events = get_gene_ml_events(preds, params)
+        scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
+
+    if rc_preds is not None:
+        logger.info("Processing reverse strand")
         rc_events = get_gene_ml_events(rc_preds, params)
-        logger.debug("Processing reverse strand")
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
-    else:
-        rc_events = None
-        rc_scored_gene_calls = None
 
     # gene calling
     sequence_length = len(seq)
     filtered_scored_gene_calls, seen = filter_best_scored_gene_calls(
-        sequence_length, scored_gene_calls, rc_all_best_scores=rc_scored_gene_calls)
+        sequence_length, scored_gene_calls, rc_scored_gene_calls)
 
     return filtered_scored_gene_calls

@@ -1,9 +1,15 @@
 import json
 import os
+from enum import Enum
 import numpy as np
 from argparse import Namespace
 from collections import namedtuple
-from enum import Enum
+
+class Strand(Enum):
+    FORWARD = "forward"
+    REVERSE = "reverse"
+    BOTH = "both"
+
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -17,7 +23,7 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 class Params(namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
     'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
-    'model_path', 'context_length', 'forward_strand_only', 'gene_range_time_limit',
+    'model_path', 'context_length', 'strand', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
     'hardmask_repeats_min_size',
@@ -40,7 +46,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
     params_dict = {
         'model_path': args.model,
         'context_length': args.context_length,
-        'forward_strand_only': False,
+        'strand': Strand(args.strand),
         'gene_range_time_limit': np.inf if args.gene_range_time_limit is None else args.gene_range_time_limit,
 
         'contigs_filter': args.contigs_filter.split(',') if args.contigs_filter else None,
