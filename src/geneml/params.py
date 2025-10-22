@@ -1,16 +1,29 @@
+import json
 import os
 import numpy as np
 from argparse import Namespace
 from collections import namedtuple
+from enum import Enum
 
-Params = namedtuple('Params', (
+class EnhancedJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Enum):
+            return obj.value
+        if hasattr(obj, "_asdict"):  # for namedtuples
+            return obj._asdict()
+        return super().default(obj)
+
+
+class Params(namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
     'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
     'model_path', 'context_length', 'forward_strand_only', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
     'hardmask_repeats_min_size',
-))
+))):
+    def to_json(self, **kwargs):
+        return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
 
 
 def get_basepath(inpath, outpath):

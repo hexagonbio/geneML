@@ -1,6 +1,5 @@
 import argparse
 import gc
-import json
 import logging
 import sys
 import time
@@ -58,7 +57,7 @@ def check_args(parser, args):
 def write_setup_info(params):
     logger.info("Running geneML version %s", __version__)
     logger.info("Command line: %s", " ".join(sys.argv[1:]))
-    parameter_info = '\n'.join(["Parameters:", json.dumps(params._asdict(), indent=2)])
+    parameter_info = '\n'.join(["Parameters:", params.to_json(indent=2)])
     logger.info(parameter_info)
 
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], str | None]:
