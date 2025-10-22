@@ -6,15 +6,15 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import tensorflow as tf
+from Bio.Seq import reverse_complement
 from helperlibs.bio import seqio
 from tqdm import tqdm
-from Bio.Seq import reverse_complement
 
 from geneml import __version__
 from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
-from geneml.params import Strand, Params, build_params_namedtuple
+from geneml.params import Params, Strand, build_params_namedtuple
 from geneml.utils import compute_optimal_num_parallelism, mask_lowercase_stretches
 
 logger = logging.getLogger("geneml")

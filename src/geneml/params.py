@@ -1,9 +1,11 @@
 import json
 import os
-from enum import Enum
-import numpy as np
 from argparse import Namespace
 from collections import namedtuple
+from enum import Enum
+
+import numpy as np
+
 
 class Strand(Enum):
     FORWARD = "forward"
