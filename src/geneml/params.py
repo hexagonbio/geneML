@@ -24,7 +24,7 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 
 class Params(namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
-    'exon_start_min_score', 'exon_end_min_score', 'gene_candidates',
+    'exon_start_min_score', 'exon_end_min_score', 'min_gene_score', 'gene_candidates',
     'model_path', 'context_length', 'strand', 'gene_range_time_limit',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
@@ -69,6 +69,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'cds_end_min_score': args.cds_end_min_score,
         'exon_start_min_score': args.exon_start_min_score,
         'exon_end_min_score': args.exon_end_min_score,
+        'min_gene_score': args.min_gene_score,
         'gene_candidates': args.gene_candidates,
         'hardmask_repeats_min_size': args.hardmask_repeats_min_size,
     }

@@ -414,7 +414,8 @@ def get_gene_range(gene_call: list[GeneEvent], is_rc: bool, sequence_length: int
 
 
 def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[list[tuple[float, list[GeneEvent]]]],
-                                  rc_best_scores: Optional[list[tuple[float, list[GeneEvent]]]]):
+                                  rc_best_scores: Optional[list[tuple[float, list[GeneEvent]]]],
+                                  min_score: float):
     """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
     overlapping calls, starting from highest scores first, and returns the best ones"""
 
@@ -428,14 +429,9 @@ def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[li
     seen = np.zeros(sequence_length, dtype='int8')
     filtered_best_scores = []
     for score, gene_call, is_rc in all_best_scores:
-        good = True
-        if score < 1:
-            # minimum score threshold: this will filter out small genes with little is_exon score support
-            good = False
-
         start_pos, end_pos = get_gene_range(gene_call, is_rc, sequence_length)
 
-        if not good or np.any(seen[start_pos:end_pos]):
+        if score < min_score or np.any(seen[start_pos:end_pos]):
             # if low score or overlaps with an already seen gene call, skip it
             continue
         filtered_best_scores.append([score, gene_call, is_rc])
@@ -480,6 +476,6 @@ def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray]
     # gene calling
     sequence_length = len(seq)
     filtered_scored_gene_calls = filter_best_scored_gene_calls(
-        sequence_length, scored_gene_calls, rc_scored_gene_calls)
+        sequence_length, scored_gene_calls, rc_scored_gene_calls, params.min_gene_score)
 
     return filtered_scored_gene_calls
