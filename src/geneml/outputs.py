@@ -99,9 +99,12 @@ def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
     for contig_id, seq in contigs.items():
         if contig_id not in results:
             continue
-        filtered_scored_gene_calls = results[contig_id]
-        filtered_scored_gene_calls.sort(key=lambda x: x[1][0].pos)  # sort by gene position
         contig_length = len(seq)
+        filtered_scored_gene_calls = results[contig_id]
+        filtered_scored_gene_calls = sorted(
+            filtered_scored_gene_calls,
+            key=lambda x: (x[1][0].pos + 1) if not x[2] else (contig_length - x[1][-1].pos)
+        )
         for gene_info in filtered_scored_gene_calls:
             gene_count += 1
             score, gene_call, is_rc = gene_info
