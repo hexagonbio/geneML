@@ -27,7 +27,8 @@ def get_exon_offsets(gene_call: list[GeneEvent]):
             last_pos = pos+1
 
 
-def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offset: int, width: int, reverse_complement: bool) -> list:
+def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offset: int, width: int,
+                     score: float, reverse_complement: bool) -> list:
     gff_rows = []
     # seqname, source, feature, start, end, score, strand, frame, attributes
 
@@ -42,7 +43,7 @@ def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offs
         "gene",
         start,
         end,
-        ".",
+        f"{score:.3f}",
         strand,
         ".",
         f"ID={gene_id}",
@@ -106,7 +107,7 @@ def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
             score, gene_call, is_rc = gene_info
             gene_id = f'GML{gene_count:05d}'
 
-            yield contig_id, gene_id, is_rc, gene_call, contig_length
+            yield contig_id, gene_id, gene_call, is_rc, contig_length, score
 
 
 def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str):
@@ -115,14 +116,14 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
     all_gff_rows = [(gff_header,)]
 
     last_contig_id = None
-    for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+    for contig_id, gene_id, gene_call, is_rc, contig_length, score in contig_gene_generator(contigs, results):
         if contig_id != last_contig_id:
             last_contig_id = contig_id
             seq = contigs[contig_id]
             region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
             all_gff_rows.append((region_header,))
 
-        all_gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, is_rc))
+        all_gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, score, is_rc))
 
     if dirname := os.path.dirname(outpath):
         os.makedirs(dirname, exist_ok=True)
@@ -135,7 +136,7 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
 def write_fasta(contigs: dict[str, str], results: dict[str, list], path: str, sequence_type: str):
     seqs = {}
     rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
-    for contig_id, gene_id, is_rc, gene_call, contig_length in contig_gene_generator(contigs, results):
+    for contig_id, gene_id, gene_call, is_rc, *_ in contig_gene_generator(contigs, results):
         contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
         cds_seq = build_cds_seq(contig_seq, gene_call)
         seqs[gene_id] = cds_seq
