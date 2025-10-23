@@ -49,7 +49,7 @@ def prettify_gene_event(event: GeneEvent) -> str:
 
 
 @njit
-def get_gene_ml_events(preds: np.ndarray, params: namedtuple):
+def get_gene_ml_events(preds: np.ndarray, params: Params):
     cds_starts = np.where(preds[MODEL_CDS_START] >= params.cds_start_min_score)[0]
     cds_ends = np.where(preds[MODEL_CDS_END] >= params.cds_end_min_score)[0]
     exon_starts = np.where(preds[MODEL_EXON_START] >= params.exon_start_min_score)[0]
@@ -153,7 +153,7 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
 
 @njit
 def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
-            params: namedtuple) -> int:
+            params: Params) -> int:
     """ Recursively attempt to build genes from the events list
     """
     num_ops = 1
@@ -201,7 +201,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
 
 @njit
-def copy_and_append_gene_event_numba(gene_def: list[GeneEventNumbaType], event: GeneEventNumbaType) -> list[GeneEventNumbaType]:
+def copy_and_append_gene_event_numba(gene_def: list[GeneEvent], event: GeneEvent) -> list[GeneEvent]:
     """ Helper function to copy and append a GeneEvent to a list of GeneEvents """
     # numba doesn't support list.append, so we have to create a new list
     new_gene_def = typed.List.empty_list(GeneEventNumbaType)
@@ -453,17 +453,17 @@ def build_coords(gene_call: list[GeneEvent], offset: int, width: int, reverse_co
         return offset+(width-gene_call[-1].pos), offset+(width-gene_call[0].pos), '-'
 
 
-def run_model(model: ResidualModelBase, seq: str) -> tuple[np.ndarray, np.ndarray, str, str]:
+def run_model(model: ResidualModelBase, seq: str) -> np.ndarray:
+    return chunked_seq_predict(model, seq)
+
+
+def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray],
+                     seq: str, rc_seq: Optional[str], contig_id: str, params: Params):
     """
     Build gene calls from a sequence using the GeneML model. Note that the coordinates in filtered_scored_gene_calls are
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
     sequence. See build_coords for converting to genomic absolute coordinates.
     """
-    return chunked_seq_predict(model, seq)
-
-
-def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray],
-                     seq: str, rc_seq: Optional[str], contig_id: str, params: namedtuple):
     if preds is None and rc_preds is None:
         raise ValueError("Cannot build gene calls without any model predictions.")
 
