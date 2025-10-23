@@ -127,7 +127,7 @@ def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None
 
 
 @njit
-def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[GeneEvent], start_idx: int, params: Params) -> list[int]:
+def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[GeneEvent], start_idx: int, max_intron_size: int) -> list[int]:
     """ Rerank the indices of the events list based on the most likely next events, to increase chance of identifying
     the best gene call based on the prediction scores within the earlier parts of the recursion
     """
@@ -139,7 +139,7 @@ def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[Gen
         priority_indices = candidate_exon_end_indices
     elif gene[-1].type == EXON_END:
         end_idx = start_idx
-        while events[end_idx].pos < gene[-1].pos + params.max_intron_size and end_idx < len(events) - 1:
+        while events[end_idx].pos < gene[-1].pos + max_intron_size and end_idx < len(events) - 1:
             end_idx += 1
         priority_indices = [i for i, e in enumerated_events[start_idx:end_idx] if e.type == EXON_START and e.score > 0.2]
     else:
@@ -164,7 +164,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         gene.append(events[i])
         i += 1
 
-    indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params)
+    indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params.max_intron_size)
     for i in indices:
         if len(results) >= params.gene_candidates or results and len(results[-1]) == 1:
             # limit the number of results to speed up
@@ -226,7 +226,7 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
             summed_scores += score  # include the score of the event itself
             num_vals += pos - last_pos
         last_pos = pos
-    event_consistency_score = 0
+    event_consistency_score = 0.0
     if num_vals:
         event_consistency_score = (summed_scores / num_vals + 1) / 2 # scale from range -1,1 to range 0,1
 
@@ -305,16 +305,14 @@ def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
 
 
 @njit
-def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, params: namedtuple) -> list[tuple[float, list[GeneEvent]]]:
+def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, params: Params) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     function_start_time = python_time()
     start_time = python_time()
     last_end_idx = -1
     skip_till_next_end_idx = False
     all_best_scores = []
-    for start_idx in range(len(events)):
-        start_event = events[start_idx]
-
+    for start_idx, start_event in enumerate(events):
         if start_event.type == CDS_START:
             end_idx = get_end_idx(start_idx, events, preds)
             if end_idx - start_idx < 2:
@@ -341,7 +339,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
 
             if params.debug:
                 with objmode:
-                    log = ' '.join([str(start_idx), str(end_idx), prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
+                    log = ' '.join([str(start_idx), str(end_idx), prettify_gene_event(start_event), prettify_gene_event(events[end_idx]),
                       ';', str(len(gene_calls)), 'gene calls',
                       ])
                     logger.debug(log)
@@ -352,7 +350,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 with objmode():
                     log = ' '.join([
                         'too many ops for', contig_id, str(start_idx), str(end_idx),
-                        prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx]),
+                        prettify_gene_event(start_event), prettify_gene_event(events[end_idx]),
                         prettify_gene_event(gene_calls[-1][0]),
                         '; elapsed time:', str(np.round(elapsed, 2))])
                     logger.warning(log)
@@ -376,7 +374,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             if python_time() - start_time > params.gene_range_time_limit:
                 with objmode():
                     log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
-                                prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
+                                prettify_gene_event(start_event), prettify_gene_event(events[end_idx])])
                     logger.warning(log)
 
                 # short circuit this gene region
@@ -443,7 +441,7 @@ def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[li
         filtered_best_scores.append([score, gene_call, is_rc])
         seen[start_pos:end_pos] = 1 if not is_rc else 2
 
-    return filtered_best_scores, seen
+    return filtered_best_scores
 
 
 def build_coords(gene_call: list[GeneEvent], offset: int, width: int, reverse_complement: bool) -> tuple[int, int, str]:
@@ -481,7 +479,7 @@ def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray]
 
     # gene calling
     sequence_length = len(seq)
-    filtered_scored_gene_calls, seen = filter_best_scored_gene_calls(
+    filtered_scored_gene_calls = filter_best_scored_gene_calls(
         sequence_length, scored_gene_calls, rc_scored_gene_calls)
 
     return filtered_scored_gene_calls

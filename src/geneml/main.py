@@ -142,7 +142,9 @@ def process_genome(params: Params):
 
     if num_cores is None:
         num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
-        logger.info(f'Based on available memory, setting parallelism to {num_cores} parallel processes and tensorflow threads to {tensorflow_thread_count or "all available"}')
+        logger.info('Based on available memory, setting parallelism to %d parallel processes '
+                    'and tensorflow threads to %s',
+                    num_cores, tensorflow_thread_count or 'all available')
     else:
         tensorflow_thread_count = None
 
@@ -153,14 +155,16 @@ def process_genome(params: Params):
     if num_cores == 1:
         logger.info('Running from main thread, parallelism only for tensorflow')
         for contig_id, seq in reordered_contigs:
-            logger.info(f'Processing contig {contig_id} of size {len(seq)}')
+            logger.info('Processing contig %s of size %d',
+                        contig_id, len(seq))
             start_time = time.time()
             _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
             results[contig_id] = r
             if segs:
                 all_segs.append(segs)
             elapsed = time.time() - start_time
-            logger.info(f'Finished processing contig {contig_id} in {elapsed:.2f} seconds, {len(seq)/elapsed:.2f} bp/s')
+            logger.info('Finished processing contig %s in %.2f seconds, %.2f bp/s',
+                        contig_id, elapsed, len(seq)/elapsed)
     else:
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_args = {}
@@ -179,7 +183,7 @@ def process_genome(params: Params):
     logger.info('Finished processing all contigs')
 
     if all_segs:
-        with open(params.basepath+'.seg', 'w') as f:
+        with open(params.basepath+'.seg', 'w', encoding='utf-8') as f:
             f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
             for segs in all_segs:
                 f.write(f'{segs}\n')
@@ -191,7 +195,8 @@ def process_genome(params: Params):
             write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
-    logger.info(f'Finished processing {params.inpath}, {genome_size/1e6:.1f}MB, in {elapsed/60:.2f} minutes')
+    logger.info('Finished processing %s, %.1fMB, in %.2f minutes',
+                params.inpath, genome_size/1e6, elapsed/60)
 
 
 def parse_args(argv=None):
