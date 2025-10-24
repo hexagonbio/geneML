@@ -438,6 +438,7 @@ def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[li
         all_best_scores = [(score, gene_call, False) for score, gene_call in best_scores]
     if rc_best_scores:
         all_best_scores += [(score, gene_call, True) for score, gene_call in rc_best_scores]
+    logger.info('Potential gene calls: %d', len(all_best_scores))
     all_best_scores.sort(reverse=True)
 
     seen = np.zeros(sequence_length, dtype='int8')
@@ -451,6 +452,7 @@ def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[li
         filtered_best_scores.append([score, gene_call, is_rc])
         seen[start_pos:end_pos] = 1 if not is_rc else 2
 
+    logger.info('Final gene calls: %d', len(filtered_best_scores))
     return filtered_best_scores
 
 
@@ -478,16 +480,16 @@ def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray]
     scored_gene_calls = None
     rc_scored_gene_calls = None
     if preds is not None:
-        logger.info("Processing forward strand")
+        logger.info('Building gene calls on the forward strand')
         events = get_gene_ml_events(preds, params)
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
 
     if rc_preds is not None:
-        logger.info("Processing reverse strand")
+        logger.info('Building gene calls on the reverse strand')
         rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
 
-    # gene calling
+    logger.info('Selecting best gene calls for %s', contig_id)
     sequence_length = len(seq)
     filtered_scored_gene_calls = filter_best_scored_gene_calls(
         sequence_length, scored_gene_calls, rc_scored_gene_calls, params.min_gene_score)

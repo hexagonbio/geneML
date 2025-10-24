@@ -75,9 +75,11 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     rc_preds = None
     rc_seq = None
     if params.strand is not Strand.REVERSE:
+        logger.info('Running gene prediction model on the forward strand')
         preds = run_model(model, seq)
 
     if params.strand is not Strand.FORWARD:
+        logger.info('Running gene prediction model on the reverse strand')
         rc_seq = reverse_complement(seq)
         rc_preds = run_model(model, rc_seq)
 
@@ -183,15 +185,19 @@ def process_genome(params: Params):
     logger.info('Finished processing all contigs')
 
     if all_segs:
+        logger.info('Writing raw scores to %s', params.basepath+'.seg')
         with open(params.basepath+'.seg', 'w', encoding='utf-8') as f:
             f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
             for segs in all_segs:
                 f.write(f'{segs}\n')
     else:
+        logger.info('Writing gene predictions to %s', params.outpath)
         write_gff_file(contigs, results, params.outpath)
         if params.output_genes:
+            logger.info('Writing gene sequences to %s', params.output_genes)
             write_fasta(contigs, results, params.output_genes, sequence_type = 'cds')
         if params.output_proteins:
+            logger.info('Writing protein sequences to %s', params.output_proteins)
             write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
