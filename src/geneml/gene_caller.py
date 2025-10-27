@@ -404,18 +404,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
     return all_best_scores
 
 
-def get_compact_events(events: list[GeneEvent]):
-
-    def short_score(score):
-        if score >= 0.95:
-            return '1'
-        return f'{score:.1f}'[-2:]
-
-    event_type_char_map = {CDS_START: 'S', CDS_END: 'E', EXON_START: 's', EXON_END: 'e'}
-
-    return ', '.join(f'{c.pos}{event_type_char_map[c.type]}:{short_score(c.score)}' for c in events)
-
-
 def get_gene_range(gene_call: list[GeneEvent], is_rc: bool, sequence_length: int) -> tuple[int, int]:
     if is_rc:
         start_pos = sequence_length - gene_call[-1].pos
@@ -456,11 +444,6 @@ def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[li
     return filtered_best_scores
 
 
-def build_coords(gene_call: list[GeneEvent], offset: int, width: int, reverse_complement: bool) -> tuple[int, int, str]:
-    if not reverse_complement:
-        return offset+gene_call[0].pos, offset+gene_call[-1].pos, '+'
-    else:
-        return offset+(width-gene_call[-1].pos), offset+(width-gene_call[0].pos), '-'
 
 
 def run_model(model: ResidualModelBase, seq: str) -> np.ndarray:
