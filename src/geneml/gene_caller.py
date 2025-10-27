@@ -156,7 +156,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             params: Params) -> int:
     """ Recursively attempt to build genes from the events list
     """
-    num_ops = 1
+    num_ops = 0
 
     # handle beginning of gene
     if i == 0:
@@ -166,6 +166,8 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
     indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params.max_intron_size)
     for i in indices:
+        num_ops += 1
+
         if len(results) >= params.gene_candidates or results and len(results[-1]) == 1:
             # limit the number of results to speed up
             break
@@ -183,7 +185,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         # handle intron start (exon end)
         if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and check_sequence_validity(new_gene, seq):
             num_ops += recurse(results, events, i + 1, new_gene, seq, params)
-            if num_ops > 10000:
+            if num_ops > params.single_recurse_max_num_ops:
                 marker = typed.List.empty_list(GeneEventNumbaType)
                 marker.append(event)
                 results.append(marker)  # marker for too many ops
@@ -309,6 +311,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     function_start_time = python_time()
     start_time = python_time()
+    num_ops = 0
     last_end_idx = -1
     skip_till_next_end_idx = False
     all_best_scores = []
@@ -318,6 +321,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             if end_idx - start_idx < 2:
                 continue
 
+            # check if range start_idx:end_idx contains a cds_end event
             cds_end_found = False
             for e in events[start_idx:end_idx+1]:
                 if e.type == CDS_END:
@@ -325,17 +329,25 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                     if end_idx != last_end_idx:
                         last_end_idx = end_idx
                         start_time = python_time()
+                        num_ops = 0
                         skip_till_next_end_idx = False
+                    elif num_ops > params.recurse_region_max_num_ops:
+                        with objmode():
+                            log = ' '.join([
+                                'recurse_region_max_num_ops reached', str(num_ops), str(python_time() - start_time),
+                                contig_id, str(start_idx), str(end_idx),
+                                prettify_gene_event(events[start_idx]), prettify_gene_event(events[end_idx])])
+                            logger.info(log)
+                        skip_till_next_end_idx = True
                     break
-            if not cds_end_found:
-                continue
-            if skip_till_next_end_idx:
+            if not cds_end_found or skip_till_next_end_idx:
+                # skip this recurse region
                 continue
 
             one_gene_events = filter_events_for_one_gene(events[start_idx:end_idx+1])
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
-            recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
+            num_ops += recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
 
             if params.debug:
                 with objmode:
@@ -371,10 +383,12 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 # choose just the best... revisit?
                 all_best_scores.append(scores[0])
 
-            if python_time() - start_time > params.gene_range_time_limit:
+            if num_ops > params.single_recurse_max_num_ops:
                 with objmode():
-                    log = ' '.join(['time limit exceeded for', contig_id, str(start_idx), str(end_idx),
-                                prettify_gene_event(start_event), prettify_gene_event(events[end_idx])])
+                    elapsed = python_time() - start_time
+                    log = ' '.join(['num_ops exceeded (' + str(num_ops) + ', ' + str(round(elapsed, 1)) + 's) for',
+                                    contig_id, str(start_idx), str(end_idx),
+                                    prettify_gene_event(start_event), prettify_gene_event(events[end_idx])])
                     logger.warning(log)
 
                 # short circuit this gene region

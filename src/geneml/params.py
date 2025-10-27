@@ -4,8 +4,6 @@ from argparse import Namespace
 from collections import namedtuple
 from enum import Enum
 
-import numpy as np
-
 
 class Strand(Enum):
     FORWARD = "forward"
@@ -25,10 +23,10 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 class Params(namedtuple('Params', (
     'min_intron_size', 'max_intron_size', 'cds_start_min_score', 'cds_end_min_score',
     'exon_start_min_score', 'exon_end_min_score', 'min_gene_score', 'gene_candidates',
-    'model_path', 'context_length', 'strand', 'gene_range_time_limit',
+    'model_path', 'context_length', 'strand',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
-    'hardmask_repeats_min_size',
+    'hardmask_repeats_min_size', 'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
 ))):
     def to_json(self, **kwargs):
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
@@ -49,7 +47,6 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'model_path': args.model,
         'context_length': args.context_length,
         'strand': Strand(args.strand),
-        'gene_range_time_limit': np.inf if args.gene_range_time_limit is None else args.gene_range_time_limit,
 
         'contigs_filter': args.contigs_filter.split(',') if args.contigs_filter else None,
         'output_segs': args.write_raw_scores,
@@ -72,6 +69,8 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'min_gene_score': args.min_gene_score,
         'gene_candidates': args.gene_candidates,
         'hardmask_repeats_min_size': args.hardmask_repeats_min_size,
+        'single_recurse_max_num_ops': 100000,
+        'recurse_region_max_num_ops': 200000,
     }
 
     return Params(*[params_dict[name] for name in Params._fields])
