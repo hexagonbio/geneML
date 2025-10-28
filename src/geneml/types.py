@@ -40,6 +40,11 @@ class Transcript:
         if not self.exons:
             raise ValueError('A transcript must have at least one exon.')
 
+        for exon in self.exons:
+            if exon.start < self.start or exon.end > self.end:
+                raise ValueError(f'Exon ({exon.start}, {exon.end}) '
+                                 f'is out of transcript bounds ({self.start}, {self.end}).')
+
     def set_transcript_id(self, transcript_id: str):
         self.transcript_id = transcript_id
 

@@ -43,7 +43,7 @@ def filter_gene_events(gene_events: list[GeneEvent]) -> list[GeneEvent]:
     return filtered_events
 
 
-def create_exons(gene_events: list[GeneEvent]) -> list[Exon]:
+def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) -> list[Exon]:
     if not gene_events:
         return []
     assert len(gene_events) % 2 == 0, 'There should be an even number of gene events.'
@@ -51,9 +51,15 @@ def create_exons(gene_events: list[GeneEvent]) -> list[Exon]:
     for event, next_event in zip(gene_events[::2], gene_events[1::2]):
         if not (event.type in (CDS_START, EXON_START) and next_event.type in (CDS_END, EXON_END)):
             raise ValueError(f'Invalid gene events pair (expected start event and end event): {event}, {next_event}')
+        if is_rc:
+            start_pos = contig_length - next_event.pos
+            end_pos = contig_length - event.pos
+        else:
+            start_pos = event.pos
+            end_pos = next_event.pos
         exon = Exon(
-            start=event.pos,
-            end=next_event.pos + 1,  # end is exclusive
+            start=start_pos,
+            end=end_pos + 1,  # end is exclusive
             events=(event, next_event)
         )
         exons.append(exon)
@@ -78,7 +84,7 @@ def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
             strand=strand,
             events=tuple(filtered_events),
             score=score,
-            exons=tuple(create_exons(filtered_events)),
+            exons=tuple(create_exons(filtered_events, contig_length, is_rc)),
         )
         transcripts.append(transcript)
     return transcripts
