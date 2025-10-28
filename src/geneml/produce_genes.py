@@ -147,7 +147,10 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
     for contig_id, transcripts in transcripts_by_contig_id.items():
         for transcript in transcripts:
             gene_count += 1
-            gene_id = f'GML{gene_count:05d}'
+            if gene_count == 1e6:
+                logger.warning('Reached 1 million predicted genes, '
+                               'will produce gene IDs with more than 6 digits.')
+            gene_id = f'GML{gene_count:06d}'
             gene = Gene(
                 gene_id=gene_id,
                 start=transcript.start,
