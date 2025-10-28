@@ -24,7 +24,7 @@ def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    logging.error("Exception:", exc_info=(exc_type, exc_value, exc_traceback))
+    logger.error("Exception:", exc_info=(exc_type, exc_value, exc_traceback))
 
 sys.excepthook = log_uncaught_exceptions
 
