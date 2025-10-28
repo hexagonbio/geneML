@@ -5,7 +5,6 @@ import numpy as np
 from Bio.Seq import reverse_complement, translate
 from numba import njit, objmode, typed, types
 
-from geneml.gene_caller import CDS_END, CDS_START, EXON_END, EXON_START, GeneEvent, build_cds_seq
 from geneml.model_loader import (
     MODEL_CDS_END,
     MODEL_CDS_START,
@@ -14,119 +13,91 @@ from geneml.model_loader import (
     MODEL_IS_EXON,
     MODEL_IS_INTRON,
 )
+from geneml.types import Gene
 
 
-def get_exon_offsets(gene_call: list[GeneEvent]):
-    last_pos = None
-    for pos, typ, score in gene_call:
-        if typ in (CDS_START, EXON_START):
-            last_pos = pos
-        elif typ in (CDS_END, EXON_END) and last_pos is not None:
-            # gene_ml cds_end and exon_end predictions have off by one issue
-            yield last_pos, pos
-            last_pos = pos+1
-
-
-def build_gff_coords(chr_name, source, gene_id, gene_call: list[GeneEvent], offset: int, width: int,
-                     score: float, reverse_complement: bool) -> list:
+def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -> list:
     gff_rows = []
-    # seqname, source, feature, start, end, score, strand, frame, attributes
+    gene_id = gene.gene_id
+    strand = '+' if gene.strand == 1 else '-'
 
+    def get_start_coordinate(start_value, offset=offset):
+        return offset + start_value + 1     # GFF is 1-based
+    def get_end_coordinate(end_value, offset=offset):
+        return offset + end_value
+
+    # seqname, source, feature, start, end, score, strand, frame, attributes
     # gene record
-    if not reverse_complement:
-        start, end, strand = offset + gene_call[0].pos + 1, offset + gene_call[-1].pos + 1, '+'
-    else:
-        start, end, strand = offset + (width - gene_call[-1].pos), offset + (width - gene_call[0].pos), '-'
     gff_rows.append((
-        chr_name,
+        contig_id,
         source,
         "gene",
-        start,
-        end,
+        get_start_coordinate(gene.start),
+        get_end_coordinate(gene.end),
         ".",
         strand,
         ".",
         f"ID={gene_id}",
     ))
 
-    # mRNA record
-    gff_rows.append((
-        chr_name,
-        source,
-        "mRNA",
-        start,
-        end,
-        f"{score:.3f}",
-        strand,
-        ".",
-        f"ID={gene_id}_mRNA;Parent={gene_id}",
-    ))
+    for i, transcript in enumerate(gene.transcripts):
+        # mRNA record
+        gff_rows.append((
+            contig_id,
+            source,
+            "mRNA",
+            get_start_coordinate(transcript.start),
+            get_end_coordinate(transcript.end),
+            f"{transcript.score:.3f}",
+            strand,
+            ".",
+            f"ID={transcript.transcript_id};Parent={gene_id}",
+        ))
 
-    # exon records
-    for i, (start, end) in enumerate(get_exon_offsets(gene_call)):
-        if not reverse_complement:
-            start, end = offset + start + 1, offset + end + 1
-        else:
-            start, end = offset + (width - end), offset + (width - start)
-        gff_rows.append((
-            chr_name,
-            source,
-            "exon",
-            start,
-            end,
-            ".",
-            strand,
-            ".",
-            f"ID={gene_id}_exon{i+1};Parent={gene_id}_mRNA",
-        ))
-        gff_rows.append((
-            chr_name,
-            source,
-            "CDS",
-            start,
-            end,
-            ".",
-            strand,
-            ".",
-            f"ID={gene_id}_CDS;Parent={gene_id}_mRNA",
-        ))
+        # exon records
+        for i, exon in enumerate(transcript.exons):
+            exon_start = get_start_coordinate(exon.start)
+            exon_end = get_end_coordinate(exon.end)
+            gff_rows.append((
+                contig_id,
+                source,
+                "exon",
+                exon_start,
+                exon_end,
+                ".",
+                strand,
+                ".",
+                f"ID={gene_id}_exon{i+1};Parent={gene_id}_mRNA",
+            ))
+            gff_rows.append((
+                contig_id,
+                source,
+                "CDS",
+                exon_start,
+                exon_end,
+                ".",
+                strand,
+                ".",
+                f"ID={gene_id}_CDS;Parent={gene_id}_mRNA",
+            ))
 
     return gff_rows
 
 
-def contig_gene_generator(contigs: dict[str, str], results: dict[str, list]):
-    gene_count = 0
-    for contig_id, seq in contigs.items():
-        if contig_id not in results:
-            continue
-        contig_length = len(seq)
-        filtered_scored_gene_calls = results[contig_id]
-        filtered_scored_gene_calls = sorted(
-            filtered_scored_gene_calls,
-            key=lambda x: (x[1][0].pos + 1) if not x[2] else (contig_length - x[1][-1].pos)
-        )
-        for gene_info in filtered_scored_gene_calls:
-            gene_count += 1
-            score, gene_call, is_rc = gene_info
-            gene_id = f'GML{gene_count:05d}'
-
-            yield contig_id, gene_id, gene_call, is_rc, contig_length, score
-
-
-def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: str):
+def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str):
     gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
 
     last_contig_id = None
-    for contig_id, gene_id, gene_call, is_rc, contig_length, score in contig_gene_generator(contigs, results):
+    for contig_id, genes in results.items():
         if contig_id != last_contig_id:
             last_contig_id = contig_id
             seq = contigs[contig_id]
             region_header = ' '.join(['##sequence-region', contig_id, '1', str(len(seq))])
             all_gff_rows.append((region_header,))
-
-        all_gff_rows.extend(build_gff_coords(contig_id, 'geneML', gene_id, gene_call, 0, contig_length, score, is_rc))
+        for gene in genes:
+            all_gff_rows.extend(build_gff_coords(contig_id, gene, source='geneML'))
 
     if dirname := os.path.dirname(outpath):
         os.makedirs(dirname, exist_ok=True)
@@ -136,13 +107,18 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list], outpath: s
             f.write(f'{formatted_gff_row}\n')
 
 
-def write_fasta(contigs: dict[str, str], results: dict[str, list], path: str, sequence_type: str):
+def write_fasta(contigs: dict[str, str], results: dict[str, list[Gene]], path: str, sequence_type: str):
     seqs = {}
     rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
-    for contig_id, gene_id, gene_call, is_rc, *_ in contig_gene_generator(contigs, results):
-        contig_seq = contigs[contig_id] if not is_rc else rc_contigs[contig_id]
-        cds_seq = build_cds_seq(contig_seq, gene_call)
-        seqs[gene_id] = cds_seq
+    for contig_id, genes in results.items():
+        for gene in genes:
+            seq = contigs[contig_id] if gene.strand == 1 else rc_contigs[contig_id]
+            for transcript in gene.transcripts:
+                cds_seq = ''
+                for exon in transcript.exons:
+                    exon_seq = seq[exon.start:exon.end]
+                    cds_seq += exon_seq
+                seqs[transcript.transcript_id] = cds_seq
 
     if sequence_type == 'cds':
         pass

@@ -1,10 +1,9 @@
 import logging
 import time
-from collections import namedtuple
 from typing import Optional
 
 import numpy as np
-from numba import njit, objmode, typed, typeof
+from numba import njit, objmode, typed
 
 from geneml.model_loader import (
     MODEL_CDS_END,
@@ -16,22 +15,21 @@ from geneml.model_loader import (
     ResidualModelBase,
 )
 from geneml.params import Params
+from geneml.produce_genes import Transcript, create_transcripts
+from geneml.types import (
+    CDS_END,
+    CDS_START,
+    EXON_END,
+    EXON_START,
+    GeneEvent,
+    GeneCallNumbaType,
+    GeneEventNumbaType,
+)
 from geneml.utils import chunked_seq_predict
 
 logger = logging.getLogger("geneml")
 
-# using dataclass would be nice, but numba doesn't support it
-GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])
-
-CDS_START = 0
-CDS_END = 1
-EXON_START = 2
-EXON_END = 3
-
 EVENT_TYPE_MAP = (MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END)
-
-GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
-GeneCallNumbaType = typeof(typed.List.empty_list(GeneEventNumbaType))
 
 
 @njit
@@ -404,46 +402,27 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
     return all_best_scores
 
 
-def get_gene_range(gene_call: list[GeneEvent], is_rc: bool, sequence_length: int) -> tuple[int, int]:
-    if is_rc:
-        start_pos = sequence_length - gene_call[-1].pos
-        end_pos = sequence_length - gene_call[0].pos
-    else:
-        start_pos = gene_call[0].pos
-        end_pos = gene_call[-1].pos
-
-    return start_pos, end_pos
-
-
-def filter_best_scored_gene_calls(sequence_length: int, best_scores: Optional[list[tuple[float, list[GeneEvent]]]],
-                                  rc_best_scores: Optional[list[tuple[float, list[GeneEvent]]]],
-                                  min_score: float):
+def filter_transcripts(transcripts: list[Transcript], min_score: float):
     """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
     overlapping calls, starting from highest scores first, and returns the best ones"""
 
-    all_best_scores = []
-    if best_scores:
-        all_best_scores = [(score, gene_call, False) for score, gene_call in best_scores]
-    if rc_best_scores:
-        all_best_scores += [(score, gene_call, True) for score, gene_call in rc_best_scores]
-    logger.info('Potential gene calls: %d', len(all_best_scores))
-    all_best_scores.sort(reverse=True)
+    logger.info('Potential transcripts: %d', len(transcripts))
+    valid_transcripts = [t for t in transcripts if t.score >= min_score]
+    logger.info('Transcripts after filtering by min score: %d', len(valid_transcripts))
+    if not valid_transcripts:
+        return []
 
-    seen = np.zeros(sequence_length, dtype='int8')
-    filtered_best_scores = []
-    for score, gene_call, is_rc in all_best_scores:
-        start_pos, end_pos = get_gene_range(gene_call, is_rc, sequence_length)
+    valid_transcripts.sort(key=lambda x: x.start)
+    non_overlapping = [valid_transcripts[0]]
+    for t in valid_transcripts[1:]:
+        if non_overlapping[-1].overlaps_with(t, ignore_strand=True):
+            if t.score > non_overlapping[-1].score:
+                non_overlapping[-1] = t
+        else:
+            non_overlapping.append(t)
 
-        if score < min_score or np.any(seen[start_pos:end_pos]):
-            # if low score or overlaps with an already seen gene call, skip it
-            continue
-        filtered_best_scores.append([score, gene_call, is_rc])
-        seen[start_pos:end_pos] = 1 if not is_rc else 2
-
-    logger.info('Final gene calls: %d', len(filtered_best_scores))
-    return filtered_best_scores
-
-
+    logger.info('Final transcripts after overlap removal: %d', len(non_overlapping))
+    return non_overlapping
 
 
 def run_model(model: ResidualModelBase, seq: str) -> np.ndarray:
@@ -451,7 +430,7 @@ def run_model(model: ResidualModelBase, seq: str) -> np.ndarray:
 
 
 def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray],
-                     seq: str, rc_seq: Optional[str], contig_id: str, params: Params):
+                     seq: str, rc_seq: Optional[str], contig_id: str, params: Params) -> list[Transcript]:
     """
     Build gene calls from a sequence using the GeneML model. Note that the coordinates in filtered_scored_gene_calls are
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
@@ -462,19 +441,22 @@ def build_gene_calls(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray]
 
     scored_gene_calls = None
     rc_scored_gene_calls = None
+    transcripts = []
+    seq_length = len(seq)
     if preds is not None:
         logger.info('Building gene calls on the forward strand')
         events = get_gene_ml_events(preds, params)
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
+        transcripts.extend(create_transcripts(scored_gene_calls, seq_length, is_rc=False))
 
     if rc_preds is not None:
         logger.info('Building gene calls on the reverse strand')
         rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
+        transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
 
     logger.info('Selecting best gene calls for %s', contig_id)
-    sequence_length = len(seq)
-    filtered_scored_gene_calls = filter_best_scored_gene_calls(
-        sequence_length, scored_gene_calls, rc_scored_gene_calls, params.min_gene_score)
+    filtered_transcripts = filter_transcripts(
+        transcripts, params.min_gene_score)
 
-    return filtered_scored_gene_calls
+    return filtered_transcripts

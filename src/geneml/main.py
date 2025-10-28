@@ -11,10 +11,11 @@ from helperlibs.bio import seqio
 from tqdm import tqdm
 
 from geneml import __version__
-from geneml.gene_caller import CDS_END, EXON_END, GeneEvent, build_gene_calls, run_model
+from geneml.gene_caller import build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.params import Params, Strand, build_params_namedtuple
+from geneml.produce_genes import Transcript, assign_transcripts_to_genes
 from geneml.utils import compute_optimal_num_parallelism, mask_lowercase_stretches
 
 logger = logging.getLogger("geneml")
@@ -61,7 +62,7 @@ def write_setup_info(params):
     parameter_info = '\n'.join(["Parameters:", params.to_json(indent=2)])
     logger.info(parameter_info)
 
-def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[list[float | GeneEvent | bool]], str | None]:
+def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
@@ -87,25 +88,14 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
         return contig_id, [], segs
 
-    filtered_scored_gene_calls = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
-
-    rebuilt_results = []
-    for score, gene_call, is_rc in filtered_scored_gene_calls:
-        rebuilt_gene_call = []
-        for i, event in enumerate(gene_call):
-            # TODO: does this gene call fixing belong elsewhere?
-            if i < len(gene_call) - 1 and gene_call[i].type == EXON_END and gene_call[i + 1].type == CDS_END:
-                continue  # skip exon end if followed by cds end
-            rebuilt_gene_call.append(GeneEvent(pos=event.pos, type=event.type, score=event.score))
-        rebuilt_results.append([score, rebuilt_gene_call, is_rc])
+    filtered_transcripts = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     # explicitly clean up memory after finishing a contig
     del preds
     del rc_preds
-    del filtered_scored_gene_calls
     gc.collect()
 
-    return contig_id, rebuilt_results, None
+    return contig_id, filtered_transcripts, None
 
 
 def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
@@ -132,6 +122,7 @@ def process_genome(params: Params):
     genome_start_time = time.time()
 
     contigs = {}
+    genes_by_contig_id = {}
     genome_size = 0
     for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
@@ -152,7 +143,6 @@ def process_genome(params: Params):
 
     reordered_contigs = reorder_contigs(contigs, num_cores)
 
-    results = {}
     all_segs = []
     if num_cores == 1:
         logger.info('Running from main thread, parallelism only for tensorflow')
@@ -161,7 +151,7 @@ def process_genome(params: Params):
                         contig_id, len(seq))
             start_time = time.time()
             _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
-            results[contig_id] = r
+            genes_by_contig_id = assign_transcripts_to_genes({contig_id: r})
             if segs:
                 all_segs.append(segs)
             elapsed = time.time() - start_time
@@ -180,7 +170,7 @@ def process_genome(params: Params):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
                     _, r, _ = future.result()
-                    results[contig_id] = r
+                    genes_by_contig_id = assign_transcripts_to_genes({contig_id: r})
 
     logger.info('Finished processing all contigs')
 
@@ -192,13 +182,13 @@ def process_genome(params: Params):
                 f.write(f'{segs}\n')
     else:
         logger.info('Writing gene predictions to %s', params.outpath)
-        write_gff_file(contigs, results, params.outpath)
+        write_gff_file(contigs, genes_by_contig_id, params.outpath)
         if params.output_genes:
             logger.info('Writing gene sequences to %s', params.output_genes)
-            write_fasta(contigs, results, params.output_genes, sequence_type = 'cds')
+            write_fasta(contigs, genes_by_contig_id, params.output_genes, sequence_type = 'cds')
         if params.output_proteins:
             logger.info('Writing protein sequences to %s', params.output_proteins)
-            write_fasta(contigs, results, params.output_proteins, sequence_type = 'fasta')
+            write_fasta(contigs, genes_by_contig_id, params.output_proteins, sequence_type = 'fasta')
 
     elapsed = time.time() - genome_start_time
     logger.info('Finished processing %s, %.1fMB, in %.2f minutes',
