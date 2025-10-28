@@ -1,6 +1,7 @@
 import argparse
 import gc
 import logging
+import re
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -11,12 +12,11 @@ from helperlibs.bio import seqio
 from tqdm import tqdm
 
 from geneml import __version__
-from geneml.gene_caller import build_gene_calls, run_model
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
+from geneml.parallelism import compute_optimal_num_parallelism
 from geneml.params import Params, Strand, build_params_namedtuple
-from geneml.produce_genes import Transcript, assign_transcripts_to_genes
-from geneml.utils import compute_optimal_num_parallelism, mask_lowercase_stretches
+from geneml.produce_genes import Transcript, assign_transcripts_to_genes, build_transcripts, run_model
 
 logger = logging.getLogger("geneml")
 
@@ -62,6 +62,21 @@ def write_setup_info(params):
     parameter_info = '\n'.join(["Parameters:", params.to_json(indent=2)])
     logger.info(parameter_info)
 
+
+def mask_lowercase_stretches(seq, min_length=200):
+    """ hardmask dna sequence ranges that have lowercase (softmasked repeats) stretches longer than the
+    specified min_length"""
+
+    pattern = fr'[acgt]{{{min_length},}}'
+
+    def replace_with_ns(match):
+        # match.group(0) is the entire matched string
+        stretch_length = len(match.group(0))
+        return 'N' * stretch_length
+
+    return re.sub(pattern, replace_with_ns, seq)
+
+
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
@@ -88,7 +103,7 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
         return contig_id, [], segs
 
-    filtered_transcripts = build_gene_calls(preds, rc_preds, seq, rc_seq, contig_id, params)
+    filtered_transcripts = build_transcripts(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     # explicitly clean up memory after finishing a contig
     del preds

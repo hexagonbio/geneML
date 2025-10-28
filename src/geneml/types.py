@@ -1,7 +1,8 @@
 from collections import namedtuple
 from dataclasses import dataclass
+
 import numpy as np
-from numba import typeof, typed
+from numba import typed, typeof
 
 CDS_START = 0
 CDS_END = 1
