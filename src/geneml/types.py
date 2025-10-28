@@ -63,7 +63,7 @@ class Gene:
             raise ValueError('A gene must have at least one transcript.')
 
         for transcript in self.transcripts:
-            transcript_id = f'{self.gene_id}_mRNA'
+            transcript_id = f'{self.gene_id}_mRNA{self.transcripts.index(transcript)+1}'
             transcript.set_transcript_id(transcript_id)
 
             if transcript.start < self.start or transcript.end > self.end:
