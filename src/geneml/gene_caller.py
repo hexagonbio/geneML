@@ -226,11 +226,6 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
     if num_vals:
         event_consistency_score = (summed_scores / num_vals + 1) / 2 # scale from range -1,1 to range 0,1
 
-    cds_seq = build_cds_seq(seq, gene_call)
-    cds_is_multiple_of_three = len(cds_seq) % 3 == 0
-    num_stop_codons = count_stop_codons(cds_seq)
-    seq_ends_with_stop_codon = ends_with_stop_codon(cds_seq)
-
     # cds start and end, exon start and end--the more/higher the more confident we are
     cds_ends_score = 0
     for e in (gene_call[0], gene_call[-1]):
@@ -241,12 +236,8 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
     score = (
         event_consistency_score +
         cds_ends_score +
-        gene_length_score +
-        (-np.inf if not cds_is_multiple_of_three else 0) +
-        (-np.inf if num_stop_codons > 1 else 0) +
-        (-np.inf if not seq_ends_with_stop_codon else 0)
+        gene_length_score
     )
-
     return score
 
 
