@@ -137,7 +137,6 @@ def process_genome(params: Params):
     genome_start_time = time.time()
 
     contigs = {}
-    genes_by_contig_id = {}
     genome_size = 0
     for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
@@ -158,6 +157,7 @@ def process_genome(params: Params):
 
     reordered_contigs = reorder_contigs(contigs, num_cores)
 
+    transcripts_by_contig_id = {}
     all_segs = []
     if num_cores == 1:
         logger.info('Running from main thread, parallelism only for tensorflow')
@@ -166,7 +166,7 @@ def process_genome(params: Params):
                         contig_id, len(seq))
             start_time = time.time()
             _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
-            genes_by_contig_id = assign_transcripts_to_genes({contig_id: r})
+            transcripts_by_contig_id[contig_id] = r
             if segs:
                 all_segs.append(segs)
             elapsed = time.time() - start_time
@@ -185,8 +185,9 @@ def process_genome(params: Params):
                     contig_id, seq_len = future_to_args[future]
                     progress.update(seq_len)
                     _, r, _ = future.result()
-                    genes_by_contig_id = assign_transcripts_to_genes({contig_id: r})
+                    transcripts_by_contig_id[contig_id] = r
 
+    genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
     logger.info('Finished processing all contigs')
 
     if all_segs:
