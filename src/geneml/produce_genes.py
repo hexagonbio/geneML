@@ -52,8 +52,8 @@ def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) 
         if not (event.type in (CDS_START, EXON_START) and next_event.type in (CDS_END, EXON_END)):
             raise ValueError(f'Invalid gene events pair (expected start event and end event): {event}, {next_event}')
         if is_rc:
-            start_pos = contig_length - next_event.pos
-            end_pos = contig_length - event.pos
+            start_pos = contig_length - next_event.pos - 1
+            end_pos = contig_length - event.pos - 1
         else:
             start_pos = event.pos
             end_pos = next_event.pos
@@ -73,8 +73,8 @@ def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
     for score, gene_events in scored_gene_calls:
         filtered_events = filter_gene_events(gene_events)
         if is_rc:
-            start_pos = contig_length - filtered_events[-1].pos
-            end_pos = contig_length - filtered_events[0].pos
+            start_pos = contig_length - filtered_events[-1].pos - 1
+            end_pos = contig_length - filtered_events[0].pos - 1
         else:
             start_pos = filtered_events[0].pos
             end_pos = filtered_events[-1].pos
