@@ -167,30 +167,73 @@ def ends_with_stop_codon(seq):
 
 
 @njit
-def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None:
-    assert gene_call and gene_call[-1].type in {EXON_END, CDS_END}, 'validity check only works with gene_calls that end with exon_end or cds_end'
+def check_exon_validity(preds: np.ndarray, start: int, end: int,
+                        min_avg_exon_score: float, max_intron_score: float) -> bool:
+    """Check if an exon region is consistent with exonic predictions.
 
-    cds_seq = build_cds_seq(seq, gene_call)
-    num_stop_codons = count_stop_codons(cds_seq)
+    Validates that a proposed exon is supported by the underlying model predictions.
+    Checks that:
+    1. No IS_INTRON score in the region exceeds the maximum threshold
+    2. Average IS_EXON score across the region meets the minimum threshold
 
-    # partial sequence so just check for start codon and premature stop codons
-    if gene_call[-1].type == EXON_END:
-        if len(cds_seq) > 2:
-            return starts_with_start_codon(cds_seq) and num_stop_codons == 0
-        return num_stop_codons == 0
+    Args:
+        preds: Model predictions array with shape (num_features, sequence_length)
+        start: Start position of the exon
+        end: End position of the exon
+        min_avg_exon_score: Minimum average IS_EXON score required across the region
+        max_intron_score: Maximum IS_INTRON score allowed at any position in the region
 
-    # full length sequence so also check for stop codon and multiple of three
-    elif gene_call[-1].type == CDS_END:
-        return num_stop_codons == 1 and len(cds_seq) % 3 == 0 and ends_with_stop_codon(cds_seq)
+    Returns:
+        Boolean value indicating whether the exon passes consistency checks
+    """
+    length = end - start
+    if not length:
+        return False
 
-    else:
-        assert False, "shouldn't get here"
+    intron_scores = preds[MODEL_IS_INTRON, start:end]
+    exon_scores = preds[MODEL_IS_EXON, start:end]
+
+    if np.any(intron_scores > max_intron_score):
+        return False
+
+    if np.mean(exon_scores) < min_avg_exon_score:
+        return False
+
+    return True
 
 
 @njit
 def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
-            params: Params) -> int:
-    """ Recursively attempt to build genes from the events list
+            preds: np.ndarray, params: Params, current_cds: str = "") -> int:
+    """Recursively build valid gene structures from filtered gene events.
+
+    Explores all valid combinations of gene events (CDS_START, CDS_END, EXON_START, EXON_END)
+    to construct complete gene structures. Uses depth-first recursion with early pruning based
+    on biological constraints and quality checks. Incrementally builds and validates the coding
+    sequence (CDS) to detect invalid paths early.
+
+    Validation checks applied during recursion:
+    - Intron and exon size constraints
+    - Exon region consistency with IS_EXON/IS_INTRON predictions
+    - Start codon presence at beginning of CDS
+    - Premature stop codons in partial CDS
+    - Valid gene structure: exactly one stop codon at the end, divisible by 3
+
+    The recursion is bounded by operation limits to prevent excessive computation in complex
+    regions. When limits are exceeded, a marker is added to results to signal truncation.
+
+    Args:
+        results: Output list to accumulate valid gene structures (modified in-place)
+        events: Filtered list of gene events to explore, starting with CDS_START
+        i: Current index in the events list being processed
+        gene: Current partial gene structure being built (modified during recursion)
+        seq: DNA sequence for the genomic region
+        preds: Model predictions array with shape (num_features, sequence_length)
+        params: Configuration parameters
+        current_cds: Incrementally built coding sequence for early validation
+
+    Returns:
+        Total number of recursive operations performed (for budget tracking)
     """
     num_ops = 0
 
@@ -199,57 +242,82 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         assert events[0].type == CDS_START, 'events must start with a cds_start event'
         gene.append(events[i])
         i += 1
+
     # Nothing to do if index out of range
     if i >= len(events):
         return 0
 
     # Loop over remaining events
     for j in range(i, len(events)):
-        num_ops += 1
+        event = events[j]
+        last_type = gene[-1].type
 
-        if len(results) >= params.gene_candidates or results and len(results[-1]) == 1:
-            # limit the number of results to speed up
+        if last_type in {CDS_START, EXON_START} and event.type not in {EXON_END, CDS_END}:
+            continue  # can only add an end after a start
+        if last_type == EXON_END and event.type != EXON_START:
+            continue  # can only add a start after an end
+
+        new_cds = current_cds
+
+        # If we're starting an exon, check the size of the previous intron
+        if event.type == EXON_START:
+            intron_start = gene[-1].pos + 1
+            intron_end = event.pos
+            intron_size = intron_end - intron_start
+            if intron_size < params.min_intron_size:
+                continue
+            if intron_size > params.max_intron_size:
+                return num_ops      # Further exon starts make the intron even longer
+
+        # If we're closing an exon, check consistency and validity
+        elif event.type in {EXON_END, CDS_END}:
+            exon_start = gene[-1].pos
+            exon_end = event.pos + 1
+            if not check_exon_validity(preds, exon_start, exon_end,
+                                       min_avg_exon_score=0.05, max_intron_score=0.9):
+                return num_ops      # Further exon ends are also expected to be inconsistent
+
+            # Build CDS incrementally - extract current exon sequence
+            exon_seq = seq[exon_start:exon_end].upper()
+            new_cds = current_cds + exon_seq
+
+            # For EXON_END, check for premature stop codons to prune invalid paths early
+            if event.type == EXON_END:
+                num_stop_codons = count_stop_codons(new_cds)
+                if len(new_cds) > 2 and not starts_with_start_codon(new_cds):
+                    return num_ops  # Further exon ends (with same start) will also lack start codon
+                if num_stop_codons > 0:
+                    return num_ops  # Further exon ends (with same start) will also contain stop codons
+
+        # If previous checks passed, add the event to the gene
+        gene.append(event)
+
+        if event.type == CDS_END:
+            # Final validity check using cached CDS
+            num_stop_codons = count_stop_codons(new_cds)
+            is_valid = (num_stop_codons == 1 and
+                       len(new_cds) % 3 == 0 and
+                       ends_with_stop_codon(new_cds))
+            if is_valid:
+                results.append(gene.copy())
+                if len(results) >= params.gene_candidates:
+                    gene.pop()
+                    break
+            gene.pop()  # Remove the cds end event and look for other possibilities
+            continue
+
+        if num_ops <= params.single_recurse_max_num_ops:
+            num_ops += 1
+            num_ops += recurse(results, events, j + 1, gene, seq, preds, params, new_cds)
+            gene.pop()
+        else:
+            marker = typed.List.empty_list(GeneEventNumbaType)
+            marker.append(event)
+            results.append(marker)  # marker for too many ops
+            gene.pop()
             break
 
-        event = events[j]
-        new_gene = copy_and_append_gene_event_numba(gene, event)
-
-        # handle cds end
-        if gene and event.type == CDS_END and check_sequence_validity(new_gene, seq):
-            results.append(new_gene)
-
-        if j + 1 >= len(events):
-            break  # no more additional events to consider
-
-        # handle intron start (exon end)
-        if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and check_sequence_validity(new_gene, seq):
-            num_ops += recurse(results, events, j + 1, new_gene, seq, params)
-            if num_ops > params.single_recurse_max_num_ops:
-                marker = typed.List.empty_list(GeneEventNumbaType)
-                marker.append(event)
-                results.append(marker)  # marker for too many ops
-                break
-
-        # handle intron end (exon start)
-        if gene[-1].type == EXON_END:
-            intron_size = event.pos - gene[-1].pos
-            if intron_size > params.max_intron_size:
-                break
-            if event.type == EXON_START and intron_size >= params.min_intron_size:
-                num_ops += recurse(results, events, j + 1, new_gene, seq, params)
-
     return num_ops
-
-
-@njit
-def copy_and_append_gene_event_numba(gene_def: list[GeneEvent], event: GeneEvent) -> list[GeneEvent]:
-    """ Helper function to copy and append a GeneEvent to a list of GeneEvents """
-    # numba doesn't support list.append, so we have to create a new list
-    new_gene_def = typed.List.empty_list(GeneEventNumbaType)
-    for e in gene_def:
-        new_gene_def.append(e)
-    new_gene_def.append(event)
-    return new_gene_def
 
 
 @njit
@@ -284,20 +352,6 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
         gene_length_score
     )
     return score
-
-
-@njit
-def build_cds_seq(seq: str, gene_call: list[GeneEvent]):
-    last_pos = None
-    cds_seq_list = []
-    for pos, typ, score in gene_call:
-        if typ in (CDS_START, EXON_START):
-            last_pos = pos
-        elif typ in (CDS_END, EXON_END) and last_pos is not None:
-            # gene_ml cds_end and exon_end predictions have off by one issue
-            cds_seq_list.append(seq[last_pos:pos+1])
-            last_pos = pos+1
-    return ''.join(cds_seq_list).upper()
 
 
 @njit
@@ -344,7 +398,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
             num_ops += recurse(gene_calls, filtered_events, 0,
-                               typed.List.empty_list(GeneEventNumbaType), seq, params)
+                               typed.List.empty_list(GeneEventNumbaType), seq, preds, params, "")
 
             if params.debug:
                 with objmode:

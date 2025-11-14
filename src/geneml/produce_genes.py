@@ -29,20 +29,6 @@ def run_model(model: ResidualModelBase, seq: str, chunk_size=100000, padding=100
     return np.concatenate(pred_list, axis=1)
 
 
-def filter_gene_events(gene_events: list[GeneEvent]) -> list[GeneEvent]:
-    if not gene_events:
-        return []
-    filtered_events = []
-    for i, event in enumerate(gene_events):
-        # skip exon end if followed by cds end
-        if (i < len(gene_events) - 1 and
-            event.type == EXON_END and
-            gene_events[i + 1].type == CDS_END):
-            continue
-        filtered_events.append(event)
-    return filtered_events
-
-
 def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) -> list[Exon]:
     if not gene_events:
         return []
@@ -71,20 +57,19 @@ def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
     transcripts = []
     strand = -1 if is_rc else 1
     for score, gene_events in scored_gene_calls:
-        filtered_events = filter_gene_events(gene_events)
         if is_rc:
-            start_pos = contig_length - filtered_events[-1].pos - 1
-            end_pos = contig_length - filtered_events[0].pos - 1
+            start_pos = contig_length - gene_events[-1].pos - 1
+            end_pos = contig_length - gene_events[0].pos - 1
         else:
-            start_pos = filtered_events[0].pos
-            end_pos = filtered_events[-1].pos
+            start_pos = gene_events[0].pos
+            end_pos = gene_events[-1].pos
         transcript = Transcript(
             start=start_pos,
             end=end_pos + 1,    #end is exclusive
             strand=strand,
-            events=tuple(filtered_events),
+            events=tuple(gene_events),
             score=score,
-            exons=tuple(create_exons(filtered_events, contig_length, is_rc)),
+            exons=tuple(create_exons(gene_events, contig_length, is_rc)),
         )
         transcripts.append(transcript)
     return transcripts
