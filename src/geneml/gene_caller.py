@@ -60,6 +60,62 @@ def get_gene_ml_events(preds: np.ndarray, params: Params):
 
 
 @njit
+def filter_events(one_gene_events: list[GeneEvent], percentile_cutoff: int,
+                  min_exon_events: int, max_exon_events: int) -> list[GeneEvent]:
+    """Filter gene events using percentile-based score thresholds.
+
+    Reduces the event set for a single gene region to limit the number of recursions.
+    Removes:
+        - Any CDS_START events that are not the first event
+        - EXON_START and EXON_END events below a score percentile threshold (capped at 0.1 minimum)
+    Retains all CDS_END events.
+    Only performs filtering on EXON_START and EXON_END events if there are more events
+    than the specified min_exon_events.
+    A hard maximum of max_exon_events is also enforced.
+
+    Args:
+        one_gene_events: List of GeneEvent objects for a single gene region
+        percentile_cutoff: Percentile threshold (0-100) for filtering event scores
+        min_exon_events: Minimum number of exon events to retain per type
+        max_exon_events: Maximum number of exon events to retain per type
+
+    Returns:
+        Filtered list of GeneEvent objects for the gene region
+    """
+    assert one_gene_events[0].type == CDS_START, 'first event must be CDS_START'
+
+    def filter_exon_events(events: list[GeneEvent], percentile: int,
+                           min_events: int, max_events: int) -> list[GeneEvent]:
+        percentile_cutoff = np.percentile([e.score for e in events], percentile)
+        threshold = min(percentile_cutoff, 0.1)
+        filtered = [e for e in events if e.score >= threshold]
+        if len(filtered) < min_events:
+            return events[:min_events]
+        if len(filtered) > max_events:
+            return events[:max_events]
+        return filtered
+
+    cds_start = [one_gene_events[0]]
+    other_events = []
+
+    for exon_event in [EXON_START, EXON_END, CDS_END]:
+        events = sorted([e for e in one_gene_events[1:] if e.type == exon_event],
+                             key=lambda x: x.score, reverse=True)
+        if events:
+            if exon_event in [EXON_START, EXON_END]:
+                filtered = filter_exon_events(events, percentile_cutoff,
+                                            min_exon_events, max_exon_events)
+                other_events.extend(filtered)
+            else:
+                # Keep all CDS_END events without filtering
+                other_events.extend(events)
+
+    other_events.sort(key=lambda x: x.pos)
+
+    return cds_start + other_events
+
+
+@njit
 def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> int:
     event = events[start_idx]
     start_pos = event.pos
@@ -267,42 +323,6 @@ def build_cds_seq(seq: str, gene_call: list[GeneEvent]):
 
 
 @njit
-def filter_events_for_one_gene(events: list[GeneEvent]) -> list[GeneEvent]:
-    """ Filter events for one gene so we limit the number of events considered, as it impacts recursion depth and
-    performance
-    """
-
-    num_intron_events = 0
-    for e in events:
-        if e.type in (EXON_START, EXON_END) and e.score > 0.1:
-            num_intron_events += 1
-    max_num_event_per_type = int(num_intron_events)
-
-    event_subset = typed.List.empty_list(GeneEventNumbaType)
-
-    # keep just the first cds_start event
-    assert events[0].type == CDS_START, 'events must start with a cds_start event'
-    event_subset.append(events[0])
-
-    for event_type in (CDS_END, EXON_START, EXON_END):
-        events_by_type = typed.List.empty_list(GeneEventNumbaType)
-        for event in events:
-            if event.type == event_type:
-                events_by_type.append(event)
-
-        if event_type == CDS_END:
-            # keep all CDS_END events since they don't impact recursion
-            event_subset.extend(events_by_type)
-        else:
-            events_by_type.sort(key=lambda x: x.score, reverse=True)
-            event_subset.extend(events_by_type[:max_num_event_per_type])
-
-    event_subset.sort()  # sort by pos
-
-    return event_subset
-
-
-@njit
 def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, params: Params) -> list[tuple[float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     function_start_time = python_time()
@@ -340,10 +360,13 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 # skip this recurse region
                 continue
 
-            one_gene_events = filter_events_for_one_gene(events[start_idx:end_idx+1])
+            one_gene_events = events[start_idx:end_idx+1]
+            filtered_events = filter_events(one_gene_events, percentile_cutoff=60,
+                                            min_exon_events=15, max_exon_events=60)
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
-            num_ops += recurse(gene_calls, one_gene_events, 0, typed.List.empty_list(GeneEventNumbaType), seq, params)
+            num_ops += recurse(gene_calls, filtered_events, 0,
+                               typed.List.empty_list(GeneEventNumbaType), seq, params)
 
             if params.debug:
                 with objmode:
