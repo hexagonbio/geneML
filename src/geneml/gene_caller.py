@@ -326,7 +326,21 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
 
 @njit
-def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
+def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent]) -> float:
+    """Compute a composite quality score for a complete gene call.
+
+    Scores a gene structure by combining two metrics:
+    A. Event consistency score: How well exonic/intronic regions match IS_EXON/IS_INTRON predictions
+    B. Border score: Average confidence of the CDS and exon start and end predictions
+    Score = (A + B) / 2
+
+    Args:
+        preds: Model predictions array with shape (num_features, sequence_length)
+        gene_call: Complete gene structure as list of GeneEvents ordered by position
+
+    Returns:
+        Composite quality score for the gene call (float in range [0, 1])
+    """
     # look at the is_exon/is_intron scores based on the intron boundaries defined by the gene call
     last_pos = None
     summed_scores = 0
@@ -337,26 +351,36 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent], seq: str):
             key = MODEL_IS_EXON if is_exon else MODEL_IS_INTRON
             other_key = MODEL_IS_INTRON if is_exon else MODEL_IS_EXON
             summed_scores += np.sum(preds[key, last_pos+1:pos]-preds[other_key, last_pos+1:pos])
-            summed_scores += score  # include the score of the event itself
-            num_vals += pos - last_pos
+            num_vals += pos - (last_pos + 1)
         last_pos = pos
     event_consistency_score = 0.0
-    if num_vals:
-        event_consistency_score = (summed_scores / num_vals + 1) / 2 # scale from range -1,1 to range 0,1
+    if num_vals > 0:
+        event_consistency_score = max(0.0, summed_scores / num_vals) # keep positive scores, else 0
 
-    # cds start and end, exon start and end--the more/higher the more confident we are
-    cds_ends_score = 0
-    for e in (gene_call[0], gene_call[-1]):
-        cds_ends_score += preds[EVENT_TYPE_MAP[e.type]][e.pos] / 2 # scale from range 0,2 to range 0,1
+    # Compute average score of the CDS and exon start and end predictions
+    ends_score = 0.0
+    for event in (gene_call[0], gene_call[-1]):
+        ends_score += preds[EVENT_TYPE_MAP[event.type]][event.pos]
+    ends_score = ends_score / 2
 
-    gene_length_score = (gene_call[-1].pos - gene_call[0].pos) / 10000  # slight preference for longer genes
+    # If there are internal events (splice sites), compute their average score
+    if len(gene_call) > 2:
+        splice_score = 0.0
+        for i in range(1, len(gene_call) - 1):
+            event = gene_call[i]
+            splice_score += preds[EVENT_TYPE_MAP[event.type]][event.pos]
+        splice_score = splice_score / (len(gene_call) - 2)
+        # Balance splice score with ends score
+        border_score = (splice_score + ends_score) / 2
+    else:
+        # Single-exon gene: only use ends_score
+        border_score = ends_score
 
-    score = (
-        event_consistency_score +
-        cds_ends_score +
-        gene_length_score
-    )
+    score = (event_consistency_score + border_score) / 2
     return score
+
+
+
 
 
 @njit
@@ -433,7 +457,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
 
                 scores = []
                 for gene_call in gene_calls:
-                    scores.append((score_gene_call(preds, gene_call, seq), gene_call))
+                    scores.append((score_gene_call(preds, gene_call), gene_call))
                 scores.sort(reverse=True)
 
                 # choose just the best... revisit?
