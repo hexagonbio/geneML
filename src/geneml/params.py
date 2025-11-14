@@ -27,6 +27,7 @@ class Params(namedtuple('Params', (
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
     'hardmask_repeats_min_size', 'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
+    'min_exon_size', 'max_exon_size',
 ))):
     def to_json(self, **kwargs):
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
@@ -60,6 +61,8 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'inpath': args.sequence,
         'outpath': args.output if args.output else ''.join([basepath, '.gff3']),
 
+        'min_exon_size': args.min_exon_size,
+        'max_exon_size': args.max_exon_size,
         'min_intron_size': args.min_intron_size,
         'max_intron_size': args.max_intron_size,
         'cds_start_min_score': args.cds_start_min_score,

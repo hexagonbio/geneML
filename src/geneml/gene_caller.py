@@ -273,6 +273,11 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         elif event.type in {EXON_END, CDS_END}:
             exon_start = gene[-1].pos
             exon_end = event.pos + 1
+            exon_size = exon_end - exon_start
+            if exon_size < params.min_exon_size:
+                continue
+            if exon_size > params.max_exon_size:
+                return num_ops      # Further exon ends make the exon even longer
             if not check_exon_validity(preds, exon_start, exon_end,
                                        min_avg_exon_score=0.05, max_intron_score=0.9):
                 return num_ops      # Further exon ends are also expected to be inconsistent
