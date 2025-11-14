@@ -221,6 +221,7 @@ def parse_args(argv=None):
     advanced.add_argument('--strand', type=str, choices=[x.value for x in Strand], default='both', help="On which strand to predict genes (default: %(default)s).")
     advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
+    advanced.add_argument('--min-gene-score', type=float, default=0.2, help="Minimum gene score for gene reporting (default: %(default)s).")
     advanced.add_argument('--min-exon-size', type=int, default=1, help="Minimum exon size (default: %(default)s).")
     advanced.add_argument('--max-exon-size', type=int, default=10000, help="Maximum exon size (default: %(default)s).")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s).")
@@ -229,7 +230,6 @@ def parse_args(argv=None):
     advanced.add_argument('--cds-end-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS end (default: %(default)s).")
     advanced.add_argument('--exon-start-min-score', type=float, default=0.01, help="Minimum model score for considering an exon start (default: %(default)s).")
     advanced.add_argument('--exon-end-min-score', type=float, default=0.01, help="Minimum model score for considering an exon end (default: %(default)s).")
-    advanced.add_argument('--min-gene-score', type=float, default=1.0, help="Minimum gene score for gene reporting (default: %(default)s).")
     advanced.add_argument('--gene-candidates', type=int, default=5000, help="Maximum number of gene candidates to consider (default: %(default)s).")
 
     args = parser.parse_args(argv)
