@@ -123,7 +123,7 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
     num_good_bases = 0
     last_good_base = None
     while pos < len(preds[0]):
-        if preds[MODEL_IS_EXON, pos] > 0.1 or preds[MODEL_IS_INTRON, pos] > 0.1:
+        if preds[MODEL_IS_EXON, pos] > 0.2 or preds[MODEL_IS_INTRON, pos] > 0.2:
             num_good_bases += 1
             last_good_base = pos
         else:
