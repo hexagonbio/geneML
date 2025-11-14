@@ -188,31 +188,6 @@ def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None
 
 
 @njit
-def rerank_indices_based_on_most_likely_next_events(gene: list, events: list[GeneEvent], start_idx: int, max_intron_size: int) -> list[int]:
-    """ Rerank the indices of the events list based on the most likely next events, to increase chance of identifying
-    the best gene call based on the prediction scores within the earlier parts of the recursion
-    """
-    enumerated_events = list(enumerate(events))
-    end_idx = len(events)
-    if gene[-1].type in (CDS_START, EXON_START):
-        candidate_exon_end_indices = [i for i, e in enumerated_events[start_idx:] if e.type == EXON_END and e.score > 0.2]
-        candidate_exon_end_indices = candidate_exon_end_indices[:2]
-        priority_indices = candidate_exon_end_indices
-    elif gene[-1].type == EXON_END:
-        end_idx = start_idx
-        while events[end_idx].pos < gene[-1].pos + max_intron_size and end_idx < len(events) - 1:
-            end_idx += 1
-        priority_indices = [i for i, e in enumerated_events[start_idx:end_idx] if e.type == EXON_START and e.score > 0.2]
-    else:
-        assert False, 'invalid gene event type'
-
-    # for completeness (even though the next event type might be constrained), add the remaining indices
-    # in the order they appear in the events list
-    indices = priority_indices + [i for i in range(start_idx, end_idx) if i not in priority_indices]
-    return indices
-
-
-@njit
 def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
             params: Params) -> int:
     """ Recursively attempt to build genes from the events list
@@ -224,28 +199,31 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         assert events[0].type == CDS_START, 'events must start with a cds_start event'
         gene.append(events[i])
         i += 1
+    # Nothing to do if index out of range
+    if i >= len(events):
+        return 0
 
-    indices = rerank_indices_based_on_most_likely_next_events(gene, events, i, params.max_intron_size)
-    for i in indices:
+    # Loop over remaining events
+    for j in range(i, len(events)):
         num_ops += 1
 
         if len(results) >= params.gene_candidates or results and len(results[-1]) == 1:
             # limit the number of results to speed up
             break
 
-        event = events[i]
+        event = events[j]
         new_gene = copy_and_append_gene_event_numba(gene, event)
 
         # handle cds end
         if gene and event.type == CDS_END and check_sequence_validity(new_gene, seq):
             results.append(new_gene)
 
-        if i + 1 >= len(events):
+        if j + 1 >= len(events):
             break  # no more additional events to consider
 
         # handle intron start (exon end)
         if gene[-1].type in {CDS_START, EXON_START} and event.type == EXON_END and check_sequence_validity(new_gene, seq):
-            num_ops += recurse(results, events, i + 1, new_gene, seq, params)
+            num_ops += recurse(results, events, j + 1, new_gene, seq, params)
             if num_ops > params.single_recurse_max_num_ops:
                 marker = typed.List.empty_list(GeneEventNumbaType)
                 marker.append(event)
@@ -258,7 +236,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             if intron_size > params.max_intron_size:
                 break
             if event.type == EXON_START and intron_size >= params.min_intron_size:
-                num_ops += recurse(results, events, i + 1, new_gene, seq, params)
+                num_ops += recurse(results, events, j + 1, new_gene, seq, params)
 
     return num_ops
 
