@@ -91,7 +91,7 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))
         return contig_id, [], segs
 
-    filtered_transcripts = build_transcripts(preds, rc_preds, seq, rc_seq, contig_id, params)
+    transcripts = build_transcripts(preds, rc_preds, seq, rc_seq, contig_id, params)
 
     # explicitly clean up memory after finishing a contig
     del preds
@@ -102,7 +102,7 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     logger.info('Finished processing contig %s in %.2f seconds, %.2f bp/s',
                 contig_id, elapsed, len(seq)/elapsed)
 
-    return contig_id, filtered_transcripts, None
+    return contig_id, transcripts, None
 
 
 def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
@@ -222,6 +222,7 @@ def parse_args(argv=None):
     advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
     advanced.add_argument('--max-transcripts', type=int, default=5, help="Maximum number of transcripts per gene (default: %(default)s).")
+    advanced.add_argument('--allow-opposite-strand-overlaps', choices=['true', 'false'], default='true', help="Predict overlapping genes on opposite strands (default: %(default)s).")
     advanced.add_argument('--min-gene-score', type=float, default=0.2, help="Minimum gene score for gene reporting (default: %(default)s).")
     advanced.add_argument('--min-exon-size', type=int, default=1, help="Minimum exon size (default: %(default)s).")
     advanced.add_argument('--max-exon-size', type=int, default=10000, help="Maximum exon size (default: %(default)s).")

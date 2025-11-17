@@ -76,27 +76,20 @@ def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]
     return transcripts
 
 
-def filter_transcripts(transcripts: list[Transcript], min_score: float, contig_id: str
-                       ) -> list[Transcript]:
-    """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
-    overlapping calls, starting from highest scores first, and returns the best ones"""
+def filter_overlapping_transcripts(transcripts: list[Transcript]) -> list[Transcript]:
+    """ This filters overlapping transcripts on opposite strands, keeping the higher scoring one """
 
-    valid_transcripts = [t for t in transcripts if t.score >= min_score]
-    if not valid_transcripts:
+    if not transcripts:
         return []
 
-    valid_transcripts.sort(key=lambda x: x.start)
-    non_overlapping = [valid_transcripts[0]]
-    for t in valid_transcripts[1:]:
-        if non_overlapping[-1].overlaps_with(t, ignore_strand=True):
-            if t.score > non_overlapping[-1].score:
-                non_overlapping[-1] = t
-        else:
-            non_overlapping.append(t)
-
-    logger.info('%s: Potential transcripts: %d', contig_id, len(transcripts))
-    logger.info('%s: Transcripts after filtering by min score: %d', contig_id, len(valid_transcripts))
-    logger.info('%s: Final transcripts after overlap removal: %d', contig_id, len(non_overlapping))
+    non_overlapping = [transcripts[0]]
+    for t in transcripts[1:]:
+        if (t.strand != non_overlapping[-1].strand and
+            non_overlapping[-1].overlaps_with(t, ignore_strand=True) and
+            t.score > non_overlapping[-1].score):
+            non_overlapping[-1] = t
+            continue
+        non_overlapping.append(t)
 
     return non_overlapping
 
@@ -130,10 +123,13 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
             transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
 
     logger.info('%s 5/5: Selecting best gene calls', contig_id)
-    filtered_transcripts = filter_transcripts(
-        transcripts, params.min_gene_score, contig_id)
 
-    return filtered_transcripts
+    transcripts.sort(key=lambda x: (x.start, x.end))
+
+    if not params.allow_opposite_strand_overlaps:
+        transcripts = filter_overlapping_transcripts(transcripts)
+
+    return transcripts
 
 
 def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]]

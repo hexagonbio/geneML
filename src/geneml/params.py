@@ -27,7 +27,7 @@ class Params(namedtuple('Params', (
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
     'hardmask_repeats_min_size', 'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
-    'max_transcripts',
+    'max_transcripts', 'allow_opposite_strand_overlaps',
     'min_exon_size', 'max_exon_size',
 ))):
     def to_json(self, **kwargs):
@@ -63,6 +63,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'outpath': args.output if args.output else ''.join([basepath, '.gff3']),
 
         'max_transcripts': args.max_transcripts,
+        'allow_opposite_strand_overlaps': args.allow_opposite_strand_overlaps == 'true',
         'min_exon_size': args.min_exon_size,
         'max_exon_size': args.max_exon_size,
         'min_intron_size': args.min_intron_size,
