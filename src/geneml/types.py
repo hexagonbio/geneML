@@ -22,6 +22,7 @@ class Exon:
     end: int
     events: tuple[GeneEvent, ...]
     score: float
+    phase: int
 
 def __post_init__(self):
     if not self.events or len(self.events) != 2:

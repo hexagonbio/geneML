@@ -78,7 +78,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
                 exon_end,
                 f"{exon.score:.3f}",
                 strand,
-                ".",
+                str(exon.phase),
                 f"ID={transcript_id}_CDS{i+1};Parent={transcript_id}",
             ))
 
