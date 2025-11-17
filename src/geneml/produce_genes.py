@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from geneml.gene_caller import get_gene_ml_events, produce_gene_calls
+from geneml.gene_caller import get_gene_ml_events, produce_gene_calls, score_gene_call
 from geneml.model_loader import ResidualModelBase
 from geneml.params import Params
 from geneml.types import CDS_END, CDS_START, EXON_END, EXON_START, Exon, Gene, GeneEvent, Transcript
@@ -29,7 +29,8 @@ def run_model(model: ResidualModelBase, seq: str, chunk_size=100000, padding=100
     return np.concatenate(pred_list, axis=1)
 
 
-def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) -> list[Exon]:
+def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
+                 contig_length: int, is_rc: bool) -> list[Exon]:
     if not gene_events:
         return []
     assert len(gene_events) % 2 == 0, f'There should be an even number of gene events: {gene_events}'
@@ -46,14 +47,15 @@ def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) 
         exon = Exon(
             start=start_pos,
             end=end_pos + 1,  # end is exclusive
-            events=(event, next_event)
+            events=(event, next_event),
+            score=score_gene_call(preds, [event, next_event]),
         )
         exons.append(exon)
     return exons
 
 
 def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]]],
-                       contig_length: int, is_rc: bool) -> list[Transcript]:
+                       preds: np.ndarray, contig_length: int, is_rc: bool) -> list[Transcript]:
     transcripts = []
     strand = -1 if is_rc else 1
     for group_id, score, gene_events in scored_gene_calls:
@@ -69,7 +71,7 @@ def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]
             strand=strand,
             events=tuple(gene_events),
             score=score,
-            exons=tuple(create_exons(gene_events, contig_length, is_rc)),
+            exons=tuple(create_exons(gene_events, preds, contig_length, is_rc)),
             group_id=group_id,
         )
         transcripts.append(transcript)
@@ -113,14 +115,14 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
         events = get_gene_ml_events(preds, params)
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
         if scored_gene_calls:
-            transcripts.extend(create_transcripts(scored_gene_calls, seq_length, is_rc=False))
+            transcripts.extend(create_transcripts(scored_gene_calls, preds, seq_length, is_rc=False))
 
     if rc_preds is not None:
         logger.info('%s 4/5: Building gene calls on reverse strand', contig_id)
         rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
         if rc_scored_gene_calls:
-            transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
+            transcripts.extend(create_transcripts(rc_scored_gene_calls, rc_preds, seq_length, is_rc=True))
 
     logger.info('%s 5/5: Selecting best gene calls', contig_id)
 
