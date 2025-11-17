@@ -35,6 +35,7 @@ def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
         return []
     assert len(gene_events) % 2 == 0, f'There should be an even number of gene events: {gene_events}'
     exons = []
+    frame = 0  # Tracks the reading frame position at the end of the previous exon
     for event, next_event in zip(gene_events[::2], gene_events[1::2]):
         if not (event.type in (CDS_START, EXON_START) and next_event.type in (CDS_END, EXON_END)):
             raise ValueError(f'Invalid gene events pair (expected start event and end event): {event}, {next_event}')
@@ -44,13 +45,20 @@ def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
         else:
             start_pos = event.pos
             end_pos = next_event.pos
+
+        # Phase indicates how many bases from the previous exon are needed to complete a codon
+        phase = (3 - frame) % 3
+
         exon = Exon(
             start=start_pos,
             end=end_pos + 1,  # end is exclusive
             events=(event, next_event),
             score=score_gene_call(preds, [event, next_event]),
+            phase=phase,
         )
         exons.append(exon)
+        exon_length = exon.end - exon.start
+        frame = (frame + exon_length) % 3
     return exons
 
 
