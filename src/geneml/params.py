@@ -68,7 +68,8 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'exon_end_min_score': args.exon_end_min_score,
         'min_gene_score': args.min_gene_score,
         'gene_candidates': args.gene_candidates,
-        'hardmask_repeats_min_size': args.hardmask_repeats_min_size,
+        'hardmask_repeats_min_size': None,
+
         'single_recurse_max_num_ops': 100000,
         'recurse_region_max_num_ops': 200000,
     }

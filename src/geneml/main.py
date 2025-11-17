@@ -1,7 +1,6 @@
 import argparse
 import gc
 import logging
-import re
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -61,20 +60,6 @@ def write_setup_info(params):
     logger.info("Command line: %s", " ".join(sys.argv[1:]))
     parameter_info = '\n'.join(["Parameters:", params.to_json(indent=2)])
     logger.info(parameter_info)
-
-
-def mask_lowercase_stretches(seq, min_length=200):
-    """ hardmask dna sequence ranges that have lowercase (softmasked repeats) stretches longer than the
-    specified min_length"""
-
-    pattern = fr'[acgt]{{{min_length},}}'
-
-    def replace_with_ns(match):
-        # match.group(0) is the entire matched string
-        stretch_length = len(match.group(0))
-        return 'N' * stretch_length
-
-    return re.sub(pattern, replace_with_ns, seq)
 
 
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
@@ -142,8 +127,6 @@ def process_genome(params: Params):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
         seq = str(record.seq)
-        if params.hardmask_repeats_min_size is not None and params.hardmask_repeats_min_size > 0:
-            seq = mask_lowercase_stretches(seq, min_length=params.hardmask_repeats_min_size)
         contigs[record.id] = seq
         genome_size += len(seq)
 
@@ -239,7 +222,6 @@ def parse_args(argv=None):
     advanced.add_argument('--min-gene-score', type=float, default=1.0, help="Minimum gene score for gene reporting (default: %(default)s).")
     advanced.add_argument('--gene-candidates', type=int, default=100, help="Maximum number of gene candidates to consider (default: %(default)s).")
     advanced.add_argument('--gene-range-time-limit', type=int, default=None, help="Time limit for each gene prediction, in seconds (default: %(default)s)")
-    advanced.add_argument('--hardmask-repeats-min-size', type=int, default=None, help="Minimum size of softmasked repeat stretches to hardmask (default: %(default)s).")
 
     args = parser.parse_args(argv)
     check_args(parser, args)
