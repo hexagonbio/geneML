@@ -52,11 +52,11 @@ def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) 
     return exons
 
 
-def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
+def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]]],
                        contig_length: int, is_rc: bool) -> list[Transcript]:
     transcripts = []
     strand = -1 if is_rc else 1
-    for score, gene_events in scored_gene_calls:
+    for group_id, score, gene_events in scored_gene_calls:
         if is_rc:
             start_pos = contig_length - gene_events[-1].pos - 1
             end_pos = contig_length - gene_events[0].pos - 1
@@ -70,6 +70,7 @@ def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
             events=tuple(gene_events),
             score=score,
             exons=tuple(create_exons(gene_events, contig_length, is_rc)),
+            group_id=group_id,
         )
         transcripts.append(transcript)
     return transcripts
@@ -118,13 +119,15 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
         logger.info('%s 3/5: Building gene calls on forward strand', contig_id)
         events = get_gene_ml_events(preds, params)
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
-        transcripts.extend(create_transcripts(scored_gene_calls, seq_length, is_rc=False))
+        if scored_gene_calls:
+            transcripts.extend(create_transcripts(scored_gene_calls, seq_length, is_rc=False))
 
     if rc_preds is not None:
         logger.info('%s 4/5: Building gene calls on reverse strand', contig_id)
         rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
-        transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
+        if rc_scored_gene_calls:
+            transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
 
     logger.info('%s 5/5: Selecting best gene calls', contig_id)
     filtered_transcripts = filter_transcripts(
@@ -135,22 +138,55 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
 
 def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]]
                                 ) -> dict[str, list[Gene]]:
+    """Assign transcripts to genes and generate unique gene identifiers.
+
+    Groups transcripts into gene loci based on the group_id assigned during gene calling.
+    Transcripts sharing the same contig, strand, and group_id are considered alternative
+    isoforms of the same gene. Each gene is assigned a unique sequential identifier in
+    the format 'GML######'.
+
+    Args:
+        transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
+
+    Returns:
+        Dictionary mapping contig IDs to lists of Gene objects, where each Gene contains
+        one or more alternative transcript isoforms
+    """
     genes_by_contig = defaultdict(list)
     gene_count = 0
+    transcript_count = 0
+
     for contig_id, transcripts in transcripts_by_contig_id.items():
-        for transcript in transcripts:
+        if not transcripts:
+            continue
+
+        transcript_count += len(transcripts)
+
+        # Group by (strand, group_id) to create genes
+        gene_groups = defaultdict(list)
+        for t in transcripts:
+            key = (t.strand, t.group_id)
+            gene_groups[key].append(t)
+
+        # Sort groups by start position
+        sorted_groups = sorted(gene_groups.items(), key=lambda x: x[1][0].start)
+
+        # Create Gene objects
+        for _, group in sorted_groups:
             gene_count += 1
             if gene_count == 1_000_000:
                 logger.warning('Reached 1 million predicted genes, '
                                'will produce gene IDs with more than 6 digits.')
-            gene_id = f'GML{gene_count:06d}'
             gene = Gene(
-                gene_id=gene_id,
-                start=transcript.start,
-                end=transcript.end,
-                strand=transcript.strand,
-                transcripts=(transcript,)
+                gene_id=f'GML{gene_count:06d}',
+                start=group[0].start,
+                end=max(t.end for t in group),
+                strand=group[0].strand,
+                transcripts=tuple(group),
             )
             genes_by_contig[contig_id].append(gene)
-    logger.info('Total predicted genes: %d', gene_count)
+
+    logger.info('Total predicted transcripts: %d', transcript_count)
+    logger.info('Total predicted genes: %d (%.2f transcripts per gene)',
+                gene_count, transcript_count / gene_count if gene_count > 0 else 0)
     return genes_by_contig

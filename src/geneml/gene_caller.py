@@ -2,7 +2,7 @@ import logging
 import time
 
 import numpy as np
-from numba import njit, objmode, typed
+from numba import njit, objmode, typed, typeof
 
 from geneml.model_loader import (
     MODEL_CDS_END,
@@ -26,6 +26,11 @@ from geneml.types import (
 logger = logging.getLogger("geneml")
 
 EVENT_TYPE_MAP = (MODEL_CDS_START, MODEL_CDS_END, MODEL_EXON_START, MODEL_EXON_END)
+
+# Define the type for (score, gene_call) tuples used in select_gene_calls
+ScoredGeneCallType = typeof((0.0, typed.List.empty_list(GeneEventNumbaType)))
+# Define the type for (group_id, score, gene_call) tuples with group information
+GroupedGeneCallType = typeof((0, 0.0, typed.List.empty_list(GeneEventNumbaType)))
 
 
 @njit
@@ -380,18 +385,172 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent]) -> float:
     return score
 
 
+@njit
+def compute_cds_length(gene_call: list[GeneEvent]) -> int:
+    """Calculate the total coding sequence (CDS) length from a gene call.
 
+    Sums the lengths of all exonic regions in a gene structure to determine
+    the total CDS length.
+
+    Args:
+        gene_call: Gene structure as list of GeneEvents ordered by position
+
+    Returns:
+        Total CDS length (bp)
+    """
+    total_len = 0
+    last_pos = -1
+
+    for event in gene_call:
+        pos = event.pos
+        event_type = event.type
+
+        if event_type in (CDS_START, EXON_START):
+            last_pos = pos
+
+        # gene_ml cds_end and exon_end predictions have off by one issue
+        elif event_type in (CDS_END, EXON_END) and last_pos != -1:
+            total_len += (pos + 1 - last_pos)
+            last_pos = pos + 1
+    return total_len
 
 
 @njit
-def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str, params: Params) -> list[tuple[float, list[GeneEvent]]]:
+def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]],
+                    max_transcripts: int) -> list[tuple[float, list[GeneEvent]]]:
+    """Select best gene calls from a group of overlapping candidates.
+
+    Filters a group of overlapping gene candidates to retain the most promising
+    isoforms based on quality score and CDS length. Prioritizes keeping the longest
+    gene among high-scoring candidates, plus additional high-scoring alternatives
+    that are similar in length.
+
+    Selection strategy:
+    1. Identify best-scoring candidates (within a score threshold of top score)
+    2. Keep the longest among those candidates
+    3. Add top scorers that meet a minimum length requirement relative to the longest
+
+    Args:
+        group: List of (score, gene_call) tuples for overlapping gene candidates
+        max_transcripts: Maximum number of alternative transcripts to retain
+
+    Returns:
+        List of (score, gene_call) tuples for selected gene calls
+    """
+    group.sort(key=lambda x: x[0], reverse=True) # sort by score
+    best_score = group[0][0]
+    best_candidates = [item for item in group if best_score - item[0] <= 0.2]
+
+    # Keep longest candidate among best candidates
+    lengths = np.array([compute_cds_length(call) for _, call in best_candidates])
+    longest_i = np.argmax(lengths)
+    longest = best_candidates[longest_i]
+    keep = [longest]
+
+    # Also keep top-scoring genes within 0.01 of best score
+    # But only if they're at least 70% as long as the longest
+    if max_transcripts > 1:
+        longest_length = lengths[longest_i]
+        min_length = longest_length * 0.7
+        length_filtered = [item for item in group
+                            if compute_cds_length(item[1]) >= min_length]
+
+        # From length-filtered candidates, get top scorers within 0.01 of each other
+        if length_filtered:
+            top_score = length_filtered[0][0]
+            top_scorers = [item for item in length_filtered
+                            if top_score - item[0] <= 0.01
+                            and item != longest]
+            num_added_transcripts = min(len(top_scorers), max_transcripts - 1)
+            keep.extend(top_scorers[:num_added_transcripts])
+
+    return keep
+
+
+@njit
+def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
+                      min_score: float, max_transcripts: int,
+                      ) -> list[tuple[int, float, list[GeneEvent]]]:
+    """Select best gene calls from candidates, supporting alternative transcripts.
+
+    Filters candidate gene calls based on minimum score.
+    Groups overlapping gene calls and selects the most promising candidates from each
+    group based on a combination of score and CDS length. Designed to retain both
+    the longest isoform and high-scoring alternative transcripts.
+
+    For each group of overlapping gene candidates:
+        1. Sorts by score (descending)
+        2. Identifies the call with longest CDS
+        3. Keeps the longest plus top-scoring alternatives (up to max_transcripts total)
+
+    Args:
+        preds: Model predictions array with shape (num_features, sequence_length)
+        gene_calls: List of candidate gene structures, each as a list of GeneEvents
+        min_score: Minimum quality score threshold
+        max_transcripts: Maximum number of alternative transcripts to retain per gene locus
+
+    Returns:
+        List of (group_id, score, gene_call) tuples for selected gene calls.
+        group_id identifies which gene locus each call belongs to.
+    """
+
+    selected = typed.List.empty_list(GroupedGeneCallType)
+    group = typed.List.empty_list(ScoredGeneCallType)
+    group_id = 0
+
+    for gene_call in gene_calls:
+        score = score_gene_call(preds, gene_call)
+        if score < min_score:
+            continue
+
+        if len(group) == 0:
+            group.append((score, gene_call))
+            continue
+
+        last_call = group[-1][1]
+
+        # Compare overlapping calls
+        if gene_call[0].pos < last_call[-1].pos:
+            group.append((score, gene_call))
+        else:
+            # Process completed group
+            if len(group) > 1:
+                best_calls = select_gene_calls_per_group(group, max_transcripts)
+            else:
+                best_calls = [group[0]]
+
+            # Add group_id to each call - unpack the tuple to use its score
+            for call_score, call in best_calls:
+                selected.append((group_id, call_score, call))
+            group_id += 1
+
+            group.clear()
+            group.append((score, gene_call))
+
+    # Process final group
+    if group:
+        if len(group) > 1:
+            best_calls = select_gene_calls_per_group(group, max_transcripts)
+        else:
+            best_calls = [group[0]]
+
+        for call_score, call in best_calls:
+            selected.append((group_id, call_score, call))
+
+    return selected
+
+
+@njit
+def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str,
+                       params: Params) -> list[tuple[int, float, list[GeneEvent]]]:
     """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
     function_start_time = python_time()
     start_time = python_time()
     num_ops = 0
     last_end_idx = -1
     skip_till_next_end_idx = False
-    all_best_scores = []
+    all_best_scores = typed.List.empty_list(GroupedGeneCallType)
+    all_gene_calls = typed.List.empty_list(GeneCallNumbaType)
     for start_idx, start_event in enumerate(events):
         if start_event.type == CDS_START:
             end_idx = get_end_idx(start_idx, events, preds)
@@ -453,15 +612,9 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                 # short circuit this gene region
                 skip_till_next_end_idx = True
 
-            if gene_calls:
-
-                scores = []
-                for gene_call in gene_calls:
-                    scores.append((score_gene_call(preds, gene_call), gene_call))
-                scores.sort(reverse=True)
-
-                # choose just the best... revisit?
-                all_best_scores.append(scores[0])
+            # Sort by start position, then end position
+            gene_calls.sort(key=lambda x: (x[0].pos, x[-1].pos))
+            all_gene_calls.extend(gene_calls)
 
             if num_ops > params.single_recurse_max_num_ops:
                 with objmode():
@@ -473,7 +626,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
 
                 # short circuit this gene region
                 skip_till_next_end_idx = True
-    all_best_scores.sort(reverse=True)
 
     elapsed = python_time() - function_start_time
     if elapsed > 600:
@@ -481,4 +633,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             log = 'slow {contig_id} at {elapsed:.2f}s'.format(contig_id=contig_id, elapsed=elapsed)
             logger.warning(log)
 
+    if all_gene_calls:
+        all_best_scores = select_gene_calls(preds, all_gene_calls, params.min_gene_score,
+                                            params.max_transcripts)
     return all_best_scores
