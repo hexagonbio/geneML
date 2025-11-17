@@ -595,22 +595,26 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                       ])
                     logger.debug(log)
 
-            if gene_calls and len(gene_calls[-1]) == 1:
-                # this is a marker for too many ops
-                elapsed = python_time() - recurse_start_time
-                with objmode():
-                    log = ' '.join([
-                        'too many ops for', contig_id, str(start_idx), str(end_idx),
-                        prettify_gene_event(start_event), prettify_gene_event(events[end_idx]),
-                        prettify_gene_event(gene_calls[-1][0]),
-                        '; elapsed time:', str(np.round(elapsed, 2))])
-                    logger.debug(log)
-
-                # remove the last gene call marker
-                gene_calls = gene_calls[:-1]
-
-                # short circuit this gene region
-                skip_till_next_end_idx = True
+            # Remove all markers (single-event lists) from gene_calls
+            if gene_calls:
+                filtered_gene_calls = typed.List.empty_list(GeneCallNumbaType)
+                for gene_call in gene_calls:
+                    if len(gene_call) == 1:
+                        # this is a marker for too many ops
+                        elapsed = python_time() - recurse_start_time
+                        if params.debug:
+                            with objmode():
+                                log = ' '.join([
+                                    'too many ops for', contig_id, str(start_idx), str(end_idx),
+                                    prettify_gene_event(start_event), prettify_gene_event(events[end_idx]),
+                                    prettify_gene_event(gene_call[0]),
+                                    '; elapsed time:', str(np.round(elapsed, 2))])
+                                logger.debug(log)
+                        # skip this marker, don't add to filtered list
+                        skip_till_next_end_idx = True
+                    else:
+                        filtered_gene_calls.append(gene_call)
+                gene_calls = filtered_gene_calls
 
             # Sort by start position, then end position
             gene_calls.sort(key=lambda x: (x[0].pos, x[-1].pos))
