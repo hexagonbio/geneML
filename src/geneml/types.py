@@ -35,6 +35,7 @@ class Transcript:
     events: tuple[GeneEvent, ...]
     score: float
     exons: tuple[Exon, ...]
+    group_id: int = -1
     transcript_id: str = ""
 
     def __post_init__(self):
