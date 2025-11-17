@@ -46,7 +46,7 @@ def filter_gene_events(gene_events: list[GeneEvent]) -> list[GeneEvent]:
 def create_exons(gene_events: list[GeneEvent], contig_length: int, is_rc: bool) -> list[Exon]:
     if not gene_events:
         return []
-    assert len(gene_events) % 2 == 0, 'There should be an even number of gene events.'
+    assert len(gene_events) % 2 == 0, f'There should be an even number of gene events: {gene_events}'
     exons = []
     for event, next_event in zip(gene_events[::2], gene_events[1::2]):
         if not (event.type in (CDS_START, EXON_START) and next_event.type in (CDS_END, EXON_END)):
@@ -153,7 +153,7 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
     for contig_id, transcripts in transcripts_by_contig_id.items():
         for transcript in transcripts:
             gene_count += 1
-            if gene_count == 1e6:
+            if gene_count == 1_000_000:
                 logger.warning('Reached 1 million predicted genes, '
                                'will produce gene IDs with more than 6 digits.')
             gene_id = f'GML{gene_count:06d}'

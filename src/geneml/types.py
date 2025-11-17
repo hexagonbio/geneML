@@ -9,6 +9,7 @@ CDS_END = 1
 EXON_START = 2
 EXON_END = 3
 
+# Note: GeneEvent uses inclusive positions
 GeneEvent = namedtuple('GeneEvent', ['pos', 'type', 'score'])
 
 GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
@@ -72,4 +73,4 @@ class Gene:
             transcript.set_transcript_id(transcript_id)
 
             if transcript.start < self.start or transcript.end > self.end:
-                raise ValueError(f'Transcript {transcript.transcript_id} is out of gene bounds.')
+                raise ValueError(f'Transcript {transcript} is out of gene bounds: {self.start}, {self.end}.')
