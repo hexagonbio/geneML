@@ -109,15 +109,22 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outp
 
 def write_fasta(contigs: dict[str, str], results: dict[str, list[Gene]], path: str, sequence_type: str):
     seqs = {}
-    rc_contigs = {contig_id: reverse_complement(seq) for contig_id, seq in contigs.items()}
     for contig_id, genes in results.items():
+        seq = contigs[contig_id]
         for gene in genes:
-            seq = contigs[contig_id] if gene.strand == 1 else rc_contigs[contig_id]
             for transcript in gene.transcripts:
                 cds_seq = ''
-                for exon in transcript.exons:
+                # For reverse strand, exons are in genomic order
+                # but we need them in transcription order
+                exons = transcript.exons if gene.strand == 1 else transcript.exons[::-1]
+
+                for exon in exons:
                     exon_seq = seq[exon.start:exon.end]
                     cds_seq += exon_seq
+
+                if gene.strand == -1:
+                    cds_seq = reverse_complement(cds_seq)
+
                 seqs[transcript.transcript_id] = cds_seq
 
     if sequence_type == 'cds':
