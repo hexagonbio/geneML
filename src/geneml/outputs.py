@@ -41,6 +41,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
     ))
 
     for transcript in gene.transcripts:
+        transcript_id = transcript.transcript_id
         # mRNA record
         gff_rows.append((
             contig_id,
@@ -51,7 +52,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
             f"{transcript.score:.3f}",
             strand,
             ".",
-            f"ID={transcript.transcript_id};Parent={gene_id}",
+            f"ID={transcript_id};Parent={gene_id}",
         ))
 
         # exon records
@@ -67,7 +68,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
                 ".",
                 strand,
                 ".",
-                f"ID={gene_id}_exon{i+1};Parent={transcript.transcript_id}",
+                f"ID={transcript_id}_exon{i+1};Parent={transcript_id}",
             ))
             gff_rows.append((
                 contig_id,
@@ -78,7 +79,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
                 ".",
                 strand,
                 ".",
-                f"ID={gene_id}_CDS{i+1};Parent={transcript.transcript_id}",
+                f"ID={transcript_id}_CDS{i+1};Parent={transcript_id}",
             ))
 
     return gff_rows
