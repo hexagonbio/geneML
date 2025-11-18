@@ -8,7 +8,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import tensorflow as tf
 from Bio.Seq import reverse_complement
 from helperlibs.bio import seqio
-from tqdm import tqdm
 
 from geneml import __version__
 from geneml.model_loader import get_cached_gene_ml_model
@@ -66,21 +65,24 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
     """
+    start_time = time.time()
+
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
-    #Get model scores
     model = get_cached_gene_ml_model(params.model_path, params.context_length)
+
+    logger.info('Processing contig %s of size %d', contig_id, len(seq))
 
     preds = None
     rc_preds = None
     rc_seq = None
     if params.strand is not Strand.REVERSE:
-        logger.info('Running gene prediction model on the forward strand')
+        logger.info('%s 1/5: Running model on forward strand', contig_id)
         preds = run_model(model, seq)
 
     if params.strand is not Strand.FORWARD:
-        logger.info('Running gene prediction model on the reverse strand')
+        logger.info('%s 2/5: Running model on reverse strand', contig_id)
         rc_seq = reverse_complement(seq)
         rc_preds = run_model(model, rc_seq)
 
@@ -94,6 +96,10 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     del preds
     del rc_preds
     gc.collect()
+
+    elapsed = time.time() - start_time
+    logger.info('Finished processing contig %s in %.2f seconds, %.2f bp/s',
+                contig_id, elapsed, len(seq)/elapsed)
 
     return contig_id, filtered_transcripts, None
 
@@ -145,33 +151,24 @@ def process_genome(params: Params):
     if num_cores == 1:
         logger.info('Running from main thread, parallelism only for tensorflow')
         for contig_id, seq in reordered_contigs:
-            logger.info('Processing contig %s of size %d',
-                        contig_id, len(seq))
-            start_time = time.time()
             _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
             transcripts_by_contig_id[contig_id] = r
             if segs:
                 all_segs.append(segs)
-            elapsed = time.time() - start_time
-            logger.info('Finished processing contig %s in %.2f seconds, %.2f bp/s',
-                        contig_id, elapsed, len(seq)/elapsed)
     else:
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
-            future_to_args = {}
+            future_to_contig = {}
             for contig_id, seq in reordered_contigs:
                 future = pool.submit(process_contig, contig_id, seq, params, tensorflow_thread_count)
-                future_to_args[future] = contig_id, len(seq)
+                future_to_contig[future] = contig_id
 
-            with tqdm(total=genome_size, unit='bp', smoothing=0.1, unit_scale=True, mininterval=1) as progress:
-                progress.set_description(f'Processing {params.inpath}')
-                for future in as_completed(future_to_args):
-                    contig_id, seq_len = future_to_args[future]
-                    progress.update(seq_len)
-                    _, r, _ = future.result()
-                    transcripts_by_contig_id[contig_id] = r
+            for future in as_completed(future_to_contig):
+                contig_id = future_to_contig[future]
+                _, r, _ = future.result()
+                transcripts_by_contig_id[contig_id] = r
 
-    genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
     logger.info('Finished processing all contigs')
+    genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
 
     if all_segs:
         logger.info('Writing raw scores to %s', params.basepath+'.seg')

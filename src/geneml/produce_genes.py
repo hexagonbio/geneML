@@ -90,13 +90,12 @@ def create_transcripts(scored_gene_calls: list[tuple[float, list[GeneEvent]]],
     return transcripts
 
 
-def filter_transcripts(transcripts: list[Transcript], min_score: float):
+def filter_transcripts(transcripts: list[Transcript], min_score: float, contig_id: str
+                       ) -> list[Transcript]:
     """ This takes potential gene calls on both forward strand and reverse complement, filters them to remove
     overlapping calls, starting from highest scores first, and returns the best ones"""
 
-    logger.info('Potential transcripts: %d', len(transcripts))
     valid_transcripts = [t for t in transcripts if t.score >= min_score]
-    logger.info('Transcripts after filtering by min score: %d', len(valid_transcripts))
     if not valid_transcripts:
         return []
 
@@ -109,7 +108,10 @@ def filter_transcripts(transcripts: list[Transcript], min_score: float):
         else:
             non_overlapping.append(t)
 
-    logger.info('Final transcripts after overlap removal: %d', len(non_overlapping))
+    logger.info('%s: Potential transcripts: %d', contig_id, len(transcripts))
+    logger.info('%s: Transcripts after filtering by min score: %d', contig_id, len(valid_transcripts))
+    logger.info('%s: Final transcripts after overlap removal: %d', contig_id, len(non_overlapping))
+
     return non_overlapping
 
 
@@ -128,20 +130,20 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
     transcripts = []
     seq_length = len(seq)
     if preds is not None:
-        logger.info('Building gene calls on the forward strand')
+        logger.info('%s 3/5: Building gene calls on forward strand', contig_id)
         events = get_gene_ml_events(preds, params)
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
         transcripts.extend(create_transcripts(scored_gene_calls, seq_length, is_rc=False))
 
     if rc_preds is not None:
-        logger.info('Building gene calls on the reverse strand')
+        logger.info('%s 4/5: Building gene calls on reverse strand', contig_id)
         rc_events = get_gene_ml_events(rc_preds, params)
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
         transcripts.extend(create_transcripts(rc_scored_gene_calls, seq_length, is_rc=True))
 
-    logger.info('Selecting best gene calls for %s', contig_id)
+    logger.info('%s 5/5: Selecting best gene calls', contig_id)
     filtered_transcripts = filter_transcripts(
-        transcripts, params.min_gene_score)
+        transcripts, params.min_gene_score, contig_id)
 
     return filtered_transcripts
 
@@ -165,4 +167,5 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
                 transcripts=(transcript,)
             )
             genes_by_contig[contig_id].append(gene)
+    logger.info('Total predicted genes: %d', gene_count)
     return genes_by_contig
