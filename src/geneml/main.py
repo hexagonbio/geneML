@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from geneml import __version__
 from geneml.model_loader import get_cached_gene_ml_model
-from geneml.outputs import build_prediction_scores_seg, write_fasta, write_gff_file
+from geneml.outputs import build_cds_sequences, build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.parallelism import compute_optimal_num_parallelism
 from geneml.params import Params, Strand, build_params_namedtuple
 from geneml.produce_genes import Transcript, assign_transcripts_to_genes, build_transcripts, run_model
@@ -182,12 +182,14 @@ def process_genome(params: Params):
     else:
         logger.info('Writing gene predictions to %s', params.outpath)
         write_gff_file(contigs, genes_by_contig_id, params.outpath)
-        if params.output_genes:
-            logger.info('Writing gene sequences to %s', params.output_genes)
-            write_fasta(contigs, genes_by_contig_id, params.output_genes, sequence_type = 'cds')
-        if params.output_proteins:
-            logger.info('Writing protein sequences to %s', params.output_proteins)
-            write_fasta(contigs, genes_by_contig_id, params.output_proteins, sequence_type = 'fasta')
+        if params.output_genes or params.output_proteins:
+            cdses_by_transcript = build_cds_sequences(contigs, genes_by_contig_id)
+            if params.output_genes:
+                logger.info('Writing gene sequences to %s', params.output_genes)
+                write_fasta(cdses_by_transcript, params.output_genes, sequence_type = 'cds')
+            if params.output_proteins:
+                logger.info('Writing protein sequences to %s', params.output_proteins)
+                write_fasta(cdses_by_transcript, params.output_proteins, sequence_type = 'protein')
 
     elapsed = time.time() - genome_start_time
     logger.info('Finished processing %s, %.1fMB, in %.2f minutes',

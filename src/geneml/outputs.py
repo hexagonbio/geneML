@@ -107,9 +107,12 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outp
             f.write(f'{formatted_gff_row}\n')
 
 
-def write_fasta(contigs: dict[str, str], results: dict[str, list[Gene]], path: str, sequence_type: str):
-    seqs = {}
+def build_cds_sequences(contigs: dict[str, str], results: dict[str, list[Gene]]
+                        ) -> dict[str, str]:
+    cdses_by_transcript = {}
     for contig_id, genes in results.items():
+        if not genes:
+            continue
         seq = contigs[contig_id]
         for gene in genes:
             for transcript in gene.transcripts:
@@ -125,17 +128,20 @@ def write_fasta(contigs: dict[str, str], results: dict[str, list[Gene]], path: s
                 if gene.strand == -1:
                     cds_seq = reverse_complement(cds_seq)
 
-                seqs[transcript.transcript_id] = cds_seq
+                cdses_by_transcript[transcript.transcript_id] = cds_seq
+    return cdses_by_transcript
 
+
+def write_fasta(cdses_by_transcript: dict[str, str], path: str, sequence_type: str):
     if sequence_type == 'cds':
-        pass
-    elif sequence_type == 'fasta':
-        seqs = {id: translate(seq, cds=True) for id, seq in seqs.items()}
+        to_write = cdses_by_transcript
+    elif sequence_type == 'protein':
+        to_write = {id: translate(seq, cds=True) for id, seq in cdses_by_transcript.items()}
     else:
         raise ValueError(f"Invalid sequence type: {sequence_type}")
 
-    with open(path, 'w') as s:
-        for gene_id, seq in seqs.items():
+    with open(path, 'w', encoding='utf-8') as s:
+        for gene_id, seq in to_write.items():
             s.write(f'>{gene_id}\n{seq}\n')
 
 
