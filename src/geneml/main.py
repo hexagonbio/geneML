@@ -164,8 +164,10 @@ def process_genome(params: Params):
 
             for future in as_completed(future_to_contig):
                 contig_id = future_to_contig[future]
-                _, r, _ = future.result()
+                _, r, segs = future.result()
                 transcripts_by_contig_id[contig_id] = r
+                if segs:
+                    all_segs.append(segs)
 
     logger.info('Finished processing all contigs')
     genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
