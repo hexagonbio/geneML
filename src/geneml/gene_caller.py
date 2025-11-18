@@ -82,6 +82,15 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
 
 
 @njit
+def starts_with_start_codon(seq):
+    # note: assumes seq is all uppercase
+    if len(seq) < 3:
+        return False
+    codon = seq[0:3]
+    return codon in ('ATG', 'TTG', 'CTG')
+
+
+@njit
 def count_stop_codons(seq):
     # note: assumes seq is all uppercase
     count = 0
@@ -108,8 +117,10 @@ def check_sequence_validity(gene_call: list[GeneEvent], seq: str) -> bool | None
     cds_seq = build_cds_seq(seq, gene_call)
     num_stop_codons = count_stop_codons(cds_seq)
 
-    # partial sequence so just check for premature stop codon
+    # partial sequence so just check for start codon and premature stop codons
     if gene_call[-1].type == EXON_END:
+        if len(cds_seq) > 2:
+            return starts_with_start_codon(cds_seq) and num_stop_codons == 0
         return num_stop_codons == 0
 
     # full length sequence so also check for stop codon and multiple of three
