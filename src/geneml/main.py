@@ -5,6 +5,7 @@ import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import enlighten
 import tensorflow as tf
 from Bio.Seq import reverse_complement
 from helperlibs.bio import seqio
@@ -148,10 +149,14 @@ def process_genome(params: Params):
 
     transcripts_by_contig_id = {}
     all_segs = []
+    manager = enlighten.get_manager()
+    progress = manager.counter(desc=f'Processing {params.inpath}', total=genome_size, unit='bp', color='green')
     if num_cores == 1:
         logger.info('Running from main thread, parallelism only for tensorflow')
         for contig_id, seq in reordered_contigs:
             _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
+            seq_len = len(contigs[contig_id])
+            progress.update(seq_len)
             transcripts_by_contig_id[contig_id] = r
             if segs:
                 all_segs.append(segs)
@@ -164,6 +169,8 @@ def process_genome(params: Params):
 
             for future in as_completed(future_to_contig):
                 contig_id = future_to_contig[future]
+                seq_len = len(contigs[contig_id])
+                progress.update(seq_len)
                 _, r, segs = future.result()
                 transcripts_by_contig_id[contig_id] = r
                 if segs:
