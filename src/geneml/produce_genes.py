@@ -142,6 +142,154 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
     return transcripts
 
 
+def collect_all_scores(transcripts_by_contig_id: dict[str, list[Transcript]]
+                           ) -> list[float]:
+    """Collect all transcript scores from all contigs into a single list."""
+    all_scores = []
+    for transcripts in transcripts_by_contig_id.values():
+        all_scores.extend([t.score for t in transcripts])
+    return all_scores
+
+
+def build_histogram(scores: np.ndarray, num_bins: int, smoothing_window: int
+                    ) -> tuple[np.ndarray, np.ndarray]:
+    """Build a histogram of transcript scores.
+
+    Args:
+        scores: 1D numpy array of transcript scores
+        num_bins: Number of bins to use for the histogram
+        smoothing_window: Window size for smoothing the histogram
+
+    Returns:
+        hist: Counts for each bin
+        bin_centers: Centers of the bins
+    """
+    hist, bin_edges = np.histogram(scores, bins=num_bins, range=(0, 1))
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    # Smooth the histogram with a rolling average to reduce noise
+    window_size = smoothing_window
+    smoothed_hist = np.convolve(hist, np.ones(window_size)/window_size, mode='same')
+
+    return smoothed_hist, bin_centers
+
+
+def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
+                          fallback_threshold: float, min_threshold: float = 0.2,
+                          max_threshold: float = 0.8) -> float:
+    """Determine a dynamic minimum gene score threshold based on the distribution of transcript
+    scores across all contigs.
+
+    Finds the deepest valley between two peaks in a bimodal score distribution. The distribution
+    is expected to have two major peaks (low-confidence and high-confidence predictions), and this
+    function identifies the threshold at the deepest valley between them, constrained to the
+    [min_threshold, max_threshold] range.
+
+    Args:
+        transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
+        fallback_threshold: Threshold to use if dynamic calculation is not possible
+        min_threshold: Minimum allowed threshold value (default: 0.2)
+        max_threshold: Maximum allowed threshold value (default: 0.8)
+
+    Returns:
+        Float threshold value representing the score at the deepest valley within
+        [min_threshold, max_threshold]. Falls back to fallback_threshold if insufficient
+        data or no valid valley is found in the allowed range.
+    """
+    # Collect all transcript scores
+    all_scores = collect_all_scores(transcripts_by_contig_id)
+    num_scores = len(all_scores)
+    if num_scores < 100:
+        logger.warning(
+            'Insufficient transcripts (%d) for dynamic scoring, using fallback threshold of %.1f',
+            num_scores, fallback_threshold
+        )
+        return fallback_threshold
+
+    # Set number of bins using square-root rule, capped between 10 and 150
+    num_bins = min(150, max(10, int(np.sqrt(num_scores))))
+
+    # Set smoothing window adaptively: use ~20% of bins, capped between 5 and 30
+    smoothing_window = min(30, max(5, int(num_bins * 0.2)))
+
+    # Create histogram to smooth the distribution
+    scores_array = np.array(all_scores)
+    smoothed_hist, bin_centers = build_histogram(scores_array, num_bins=num_bins,
+                                                 smoothing_window=smoothing_window)
+
+    # Find local minima (valleys) and maxima (peaks)
+    diff = np.diff(smoothed_hist)
+
+    # Find indices where derivative crosses zero
+    minima_indices = np.where((diff[:-1] < 0) & (diff[1:] > 0))[0] + 1
+    maxima_indices = np.where((diff[:-1] > 0) & (diff[1:] < 0))[0] + 1
+
+    if len(maxima_indices) < 2 or len(minima_indices) == 0:
+        logger.warning(
+            'No clear multimodal distribution found (peaks: %d, valleys: %d), '
+            'using fallback threshold of %.1f',
+            len(maxima_indices), len(minima_indices), fallback_threshold
+        )
+        return fallback_threshold
+
+    # For each minimum, check if it's between two peaks AND within the allowed threshold range
+    valid_minima = []
+    for minimum_idx in minima_indices:
+        threshold_value = bin_centers[minimum_idx]
+
+        # Skip minima outside the allowed range
+        if threshold_value < min_threshold or threshold_value > max_threshold:
+            continue
+
+        peaks_left = maxima_indices[maxima_indices < minimum_idx]
+        peaks_right = maxima_indices[maxima_indices > minimum_idx]
+
+        if len(peaks_left) > 0 and len(peaks_right) > 0:
+            valid_minima.append(minimum_idx)
+
+    if len(valid_minima) == 0:
+        logger.warning(
+            'No local minimum found between peaks in range [%.2f, %.2f], '
+            'using fallback threshold of %.1f',
+            min_threshold, max_threshold, fallback_threshold
+        )
+        return fallback_threshold
+
+    # Find the lowest valid minimum
+    minimum_depths = smoothed_hist[valid_minima]
+    lowest_minimum_idx = valid_minima[np.argmin(minimum_depths)]
+
+    threshold = round(bin_centers[lowest_minimum_idx], 2)
+
+    logger.info(
+        'Dynamic threshold calculated: %.2f (based on %d transcripts)',
+        threshold, len(all_scores)
+    )
+
+    return float(threshold)
+
+
+def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
+                                fallback_threshold: float) -> dict[str, list[Transcript]]:
+    """Filter transcripts by a dynamically determined score threshold.
+
+    Args:
+        transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
+        fallback_threshold: Threshold to use if dynamic calculation is not possible
+
+    Returns:
+        Dictionary mapping contig IDs to lists of Transcript objects that pass the dynamic threshold
+    """
+    threshold = get_dynamic_threshold(transcripts_by_contig_id, fallback_threshold)
+
+    filtered_transcripts_by_contig_id = {}
+    for contig_id, transcripts in transcripts_by_contig_id.items():
+        filtered_transcripts = [t for t in transcripts if t.score >= threshold]
+        filtered_transcripts_by_contig_id[contig_id] = filtered_transcripts
+
+    return filtered_transcripts_by_contig_id
+
+
 def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]]
                                 ) -> dict[str, list[Gene]]:
     """Assign transcripts to genes and generate unique gene identifiers.

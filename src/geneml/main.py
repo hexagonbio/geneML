@@ -15,7 +15,13 @@ from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_cds_sequences, build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.parallelism import compute_optimal_num_parallelism
 from geneml.params import Params, Strand, build_params_namedtuple
-from geneml.produce_genes import Transcript, assign_transcripts_to_genes, build_transcripts, run_model
+from geneml.produce_genes import (
+    Transcript,
+    assign_transcripts_to_genes,
+    build_transcripts,
+    filter_by_dynamic_threshold,
+    run_model,
+)
 
 logger = logging.getLogger("geneml")
 
@@ -137,6 +143,17 @@ def process_genome(params: Params):
         contigs[record.id] = seq
         genome_size += len(seq)
 
+    # Disable dynamic scoring if the input sequence is too short
+    if params.dynamic_scoring and genome_size < 100_000:
+        logger.warning(
+            'Input sequence is too small (%d bp) for dynamic scoring. '
+            'Using fixed threshold of %.2f instead. '
+            'Consider specifying a custom threshold with --min-gene-score.',
+            genome_size, params.min_gene_score
+        )
+        # Create new Params with dynamic_scoring disabled
+        params = params._replace(dynamic_scoring=False)
+
     if num_cores is None:
         num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
         logger.info('Based on available memory, setting parallelism to %d parallel processes '
@@ -177,6 +194,10 @@ def process_genome(params: Params):
                     all_segs.append(segs)
 
     logger.info('Finished processing all contigs')
+    if params.dynamic_scoring:
+        logger.info('Filtering gene calls by dynamic threshold')
+        transcripts_by_contig_id = filter_by_dynamic_threshold(transcripts_by_contig_id,
+                                                               params.min_gene_score)
     genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
 
     if all_segs:
@@ -223,7 +244,7 @@ def parse_args(argv=None):
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
     advanced.add_argument('--max-transcripts', type=int, default=5, help="Maximum number of transcripts per gene (default: %(default)s).")
     advanced.add_argument('--allow-opposite-strand-overlaps', choices=['true', 'false'], default='true', help="Predict overlapping genes on opposite strands (default: %(default)s).")
-    advanced.add_argument('--min-gene-score', type=float, default=0.2, help="Minimum gene score for gene reporting (default: %(default)s).")
+    advanced.add_argument('--min-gene-score', type=str, default='dynamic', help="Minimum gene score for gene reporting. Can be a float value or 'dynamic' (default: %(default)s). Dynamic mode requires >=100,000 bp total input.")
     advanced.add_argument('--min-exon-size', type=int, default=1, help="Minimum exon size (default: %(default)s).")
     advanced.add_argument('--max-exon-size', type=int, default=10000, help="Maximum exon size (default: %(default)s).")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s).")
