@@ -638,6 +638,10 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
             logger.warning(log)
 
     if all_gene_calls:
-        all_best_scores = select_gene_calls(preds, all_gene_calls, params.min_gene_score,
+        if params.dynamic_scoring:
+            min_score = 0.01
+        else:
+            min_score = params.min_gene_score
+        all_best_scores = select_gene_calls(preds, all_gene_calls, min_score,
                                             params.max_transcripts)
     return all_best_scores
