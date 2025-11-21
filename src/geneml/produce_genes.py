@@ -142,12 +142,29 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
     return transcripts
 
 
-def collect_all_scores(transcripts_by_contig_id: dict[str, list[Transcript]]
+def collect_max_scores(transcripts_by_contig_id: dict[str, list[Transcript]]
                            ) -> list[float]:
-    """Collect all transcript scores from all contigs into a single list."""
-    all_scores = []
-    for transcripts in transcripts_by_contig_id.values():
-        all_scores.extend([t.score for t in transcripts])
+    """Collect representative scores from all gene loci.
+
+    For each locus (defined by contig, strand, and group_id), only the maximum
+    transcript score is included. This prevents bias from loci with multiple
+    isoforms artificially inflating the high-confidence peak.
+
+    Args:
+        transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
+
+    Returns:
+        List of maximum scores, one per gene locus
+    """
+    # Group transcripts by locus (contig, strand, group_id)
+    locus_scores = defaultdict(list)
+    for contig_id, transcripts in transcripts_by_contig_id.items():
+        for t in transcripts:
+            key = (contig_id, t.strand, t.group_id)
+            locus_scores[key].append(t.score)
+
+    # Take max score per locus
+    all_scores = [max(scores) for scores in locus_scores.values()]
     return all_scores
 
 
@@ -197,11 +214,11 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
         data or no valid valley is found in the allowed range.
     """
     # Collect all transcript scores
-    all_scores = collect_all_scores(transcripts_by_contig_id)
+    all_scores = collect_max_scores(transcripts_by_contig_id)
     num_scores = len(all_scores)
     if num_scores < 100:
         logger.warning(
-            'Insufficient transcripts (%d) for dynamic scoring, using fallback threshold of %.1f',
+            'Insufficient gene loci (%d) for dynamic scoring, using fallback threshold of %.1f',
             num_scores, fallback_threshold
         )
         return fallback_threshold
@@ -262,7 +279,7 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
     threshold = round(bin_centers[lowest_minimum_idx], 2)
 
     logger.info(
-        'Dynamic threshold calculated: %.2f (based on %d transcripts)',
+        'Dynamic threshold calculated: %.2f (based on %d gene loci)',
         threshold, len(all_scores)
     )
 
