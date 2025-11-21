@@ -361,7 +361,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                         prettify_gene_event(start_event), prettify_gene_event(events[end_idx]),
                         prettify_gene_event(gene_calls[-1][0]),
                         '; elapsed time:', str(np.round(elapsed, 2))])
-                    logger.warning(log)
+                    logger.debug(log)
 
                 # remove the last gene call marker
                 gene_calls = gene_calls[:-1]
@@ -385,7 +385,7 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                     log = ' '.join(['num_ops exceeded (' + str(num_ops) + ', ' + str(round(elapsed, 1)) + 's) for',
                                     contig_id, str(start_idx), str(end_idx),
                                     prettify_gene_event(start_event), prettify_gene_event(events[end_idx])])
-                    logger.warning(log)
+                    logger.info(log)
 
                 # short circuit this gene region
                 skip_till_next_end_idx = True
