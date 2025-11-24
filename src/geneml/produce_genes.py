@@ -143,29 +143,36 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
 
 
 def collect_max_scores(transcripts_by_contig_id: dict[str, list[Transcript]]
-                           ) -> list[float]:
-    """Collect representative scores from all gene loci.
+                           ) -> tuple[list[float], list[int]]:
+    """Collect representative scores and lengths from all gene loci.
 
     For each locus (defined by contig, strand, and group_id), only the maximum
     transcript score is included. This prevents bias from loci with multiple
-    isoforms artificially inflating the high-confidence peak.
+    isoforms artificially inflating the high-confidence peak. The length of the
+    transcript with the maximum score is also collected.
 
     Args:
         transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
 
     Returns:
-        List of maximum scores, one per gene locus
+        Tuple of (scores, lengths) where each list contains one value per gene locus
     """
     # Group transcripts by locus (contig, strand, group_id)
-    locus_scores = defaultdict(list)
+    locus_transcripts = defaultdict(list)
     for contig_id, transcripts in transcripts_by_contig_id.items():
         for t in transcripts:
             key = (contig_id, t.strand, t.group_id)
-            locus_scores[key].append(t.score)
+            locus_transcripts[key].append(t)
 
-    # Take max score per locus
-    all_scores = [max(scores) for scores in locus_scores.values()]
-    return all_scores
+    # Take max score per locus and corresponding transcript length
+    all_scores = []
+    all_lengths = []
+    for transcripts in locus_transcripts.values():
+        max_transcript = max(transcripts, key=lambda t: t.score)
+        all_scores.append(max_transcript.score)
+        all_lengths.append(max_transcript.end - max_transcript.start)
+
+    return all_scores, all_lengths
 
 
 def build_histogram(scores: np.ndarray, num_bins: int, smoothing_window: int
@@ -192,7 +199,7 @@ def build_histogram(scores: np.ndarray, num_bins: int, smoothing_window: int
 
 
 def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
-                          fallback_threshold: float, min_threshold: float = 0.2,
+                          fallback_threshold: float, params: Params, min_threshold: float = 0.2,
                           max_threshold: float = 0.8) -> float:
     """Determine a dynamic minimum gene score threshold based on the distribution of transcript
     scores across all contigs.
@@ -214,7 +221,10 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
         data or no valid valley is found in the allowed range.
     """
     # Collect all transcript scores
-    all_scores = collect_max_scores(transcripts_by_contig_id)
+    all_scores, all_lengths = collect_max_scores(transcripts_by_contig_id)
+    with open(params.basepath+'.txt', 'w', encoding='utf-8') as f:
+        for score, length in zip(all_scores, all_lengths):
+            f.write(f'{score}\t{length}\n')
     num_scores = len(all_scores)
     if num_scores < 100:
         logger.warning(
@@ -287,7 +297,7 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
 
 
 def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
-                                fallback_threshold: float) -> dict[str, list[Transcript]]:
+                                fallback_threshold: float, params: Params) -> dict[str, list[Transcript]]:
     """Filter transcripts by a dynamically determined score threshold.
 
     Args:
@@ -297,7 +307,7 @@ def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcr
     Returns:
         Dictionary mapping contig IDs to lists of Transcript objects that pass the dynamic threshold
     """
-    threshold = get_dynamic_threshold(transcripts_by_contig_id, fallback_threshold)
+    threshold = get_dynamic_threshold(transcripts_by_contig_id, fallback_threshold, params)
 
     filtered_transcripts_by_contig_id = {}
     for contig_id, transcripts in transcripts_by_contig_id.items():
