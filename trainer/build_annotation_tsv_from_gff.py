@@ -2,6 +2,8 @@ import gzip
 import os
 import sys
 
+FLANK_SIZE = 1000
+
 genome_id = sys.argv[1]
 path = sys.argv[2]
 data_dir = sys.argv[3]
@@ -125,16 +127,16 @@ with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
         start = exon_starts[0]
         end = exon_ends[-1]
 
-        # define utr to be 1000 bp outside of gene, unless there's a neighboring gene
+        # Add flank of size FLANK_SIZE, but not beyond neighboring genes
         idx = breakpoints[key].index(start)
-        start = max(start-1000, breakpoints[key][idx-1] if idx > 0 else 0)
+        start = max(start-FLANK_SIZE, breakpoints[key][idx-1] if idx > 0 else 0)
         idx = breakpoints[key].index(end)
-        end = min(end+1000, breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 else 1e10)
+        end = min(end+FLANK_SIZE, breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 else 1e10)
 
         # skip genes at the ends of a contig
-        if start < 2000:
+        if start < FLANK_SIZE:
             continue
-        if end > inferred_contig_sizes[chrom]-2000:
+        if end > inferred_contig_sizes[chrom]-FLANK_SIZE:
             continue
 
         print(name.replace('"', ''),  # gene name
