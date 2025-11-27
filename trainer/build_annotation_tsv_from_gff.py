@@ -127,17 +127,17 @@ with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
         start = exon_starts[0]
         end = exon_ends[-1]
 
-        # Add flank of size FLANK_SIZE, but not beyond neighboring genes
-        idx = breakpoints[key].index(start)
-        start = max(start-FLANK_SIZE, breakpoints[key][idx-1] if idx > 0 else 0)
-        idx = breakpoints[key].index(end)
-        end = min(end+FLANK_SIZE, breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 else 1e10)
-
         # skip genes at the ends of a contig
         if start < FLANK_SIZE:
             continue
         if end > inferred_contig_sizes[chrom]-FLANK_SIZE:
             continue
+
+        # Add flank of size FLANK_SIZE, but not beyond neighboring genes
+        idx = breakpoints[key].index(start)
+        start = max(start-FLANK_SIZE, breakpoints[key][idx-1] if idx > 0 else 0)
+        idx = breakpoints[key].index(end)
+        end = min(end+FLANK_SIZE, breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 else 1e10)
 
         print(name.replace('"', ''),  # gene name
               0,  # paralogous, not used in downstream code
