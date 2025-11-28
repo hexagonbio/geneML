@@ -149,7 +149,13 @@ def main():
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10])
         BATCH_SIZE = 12*N_GPUS
-    elif int(args.context_length) == 10000:
+    elif int(args.context_length) == 5360:
+        W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
+                        21, 21, 21, 21, 29, 29, 29, 29])
+        AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
+                         10, 10, 10, 10, 15, 15, 15, 15])
+        BATCH_SIZE = 8*N_GPUS
+    elif int(args.context_length) == 10080:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 41, 41, 41, 41])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
