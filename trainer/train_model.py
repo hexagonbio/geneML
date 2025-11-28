@@ -5,7 +5,6 @@
 import argparse
 import os
 import re
-import subprocess
 import sys
 import time
 
@@ -41,16 +40,10 @@ def get_args():
         required=True,
     )
     parser.add_argument(
-        '--job-dir',
+        '--keras-save-path',
         type=str,
-        required=True,
-        help='local or GCS location for writing checkpoints and exporting '
-             'models')
-    parser.add_argument(
-            '--job-name',
-            type=str,
-            required=True,
-            )
+        default='./models/',
+        help='Directory to save keras model files (default: ./models/)')
     parser.add_argument(
         '--num-epochs',
         type=int,
@@ -96,7 +89,6 @@ def main():
     os.makedirs('Models', exist_ok=True)
 
     logname = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + '.log')
-    remote_logpath = os.path.join(args.job_dir, 'Models', args.job_name, logname)
     local_logpath = './Models/' + logname
 
     def remove_ansi_codes(text):
@@ -209,17 +201,7 @@ def main():
     # Training and validation
     ###############################################################################
 
-    if args.train_path and args.train_path.startswith('gs://'):
-        tee('starting download')
-        sys.stdout.flush()
-        subprocess.run(f'gcloud storage -q cp -n {args.train_path} .'.split())
-        tee('finished download')
-        sys.stdout.flush()
-
-        filename = args.train_path.split('/')[-1]
-        h5f = h5py.File(filename, 'r')
-    else:
-        h5f = h5py.File(args.train_path, 'r')
+    h5f = h5py.File(args.train_path, 'r')
 
     num_idx = len(h5f.keys())//2
     tee('num_idx:', num_idx)
@@ -305,16 +287,11 @@ def main():
             sys.stdout.flush()
 
             filename = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + f'_ep{epoch_num}.h5')
-            # remote_path = os.path.join(args.job_dir, 'Models', args.job_name, filename)
-            # local_path = './Models/' + filename
-            # model.save(local_path)
-            # two step needed for h5 files it appears, the TensorFlow SavedModel format should support saving to gs directly
-            # subprocess.run(f'gcloud storage -q cp {local_path} {remote_path}'.split())
             tee.f.flush()
-            subprocess.run(f'gcloud storage -q cp {local_logpath} {remote_logpath}'.split())
 
-            remote_path_keras = os.path.join(args.job_dir, 'Models', args.job_name, filename.replace('.h5', '.keras'))
-            model.save(remote_path_keras)
+            os.makedirs(args.keras_save_path, exist_ok=True)
+            local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
+            model.save(local_path_keras)
 
             if epoch_num >= 6:
                 K.set_value(model.optimizer.learning_rate, 0.5 * K.get_value(model.optimizer.learning_rate))
