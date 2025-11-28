@@ -20,11 +20,10 @@ assert sys.argv[1] in ['train', 'test', 'all'], "failed: sys.argv[1] in ['train'
 # assert sys.argv[2] in ['0', '1', 'all']
 
 mode = sys.argv[1]
-CL_max = int(sys.argv[2])
-suffix = sys.argv[3]
-data_dir = sys.argv[4]
-sequence = sys.argv[5]
-splice_table = sys.argv[6]
+suffix = sys.argv[2]
+data_dir = sys.argv[3]
+sequence = sys.argv[4]
+splice_table = sys.argv[5]
 
 ###############################################################################
 
@@ -50,8 +49,6 @@ with open(splice_table, 'r') as fpr1:
         data2 = re.split('\n|\t|:|-', line2)[:-1]
 
         assert data1[2] == data2[0], 'failed: data1[2] == data2[0]'
-        assert int(data1[4]) == int(data2[1])+CL_max//2+1, 'failed: int(data1[4]) == int(data2[1])+CL_max//2+1'
-        assert int(data1[5]) == int(data2[2])-CL_max//2, 'failed: int(data1[5]) == int(data2[2])-CL_max//2'
 
         # count += 1
         # if count>2000: break
@@ -79,7 +76,7 @@ fpr2.close()
 ###############################################################################
 
 h5f = h5py.File(os.path.join(data_dir, 'datafile'
-                + '_' + mode + '_' + str(CL_max) + '_' + suffix
+                + '_' + mode + '_' + suffix
                 + '.h5'), 'w')
 
 
