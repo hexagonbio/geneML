@@ -9,7 +9,7 @@ FASTA_DIR=$(realpath ${4:=./})
 echo DATA_DIR: $DATA_DIR
 mkdir -p $DATA_DIR
 
-if [ -f "$DATA_DIR/datafile_train_${G}.h5" ]; then
+if [ -f "$DATA_DIR/datafile_all_${G}.h5" ]; then
     exit
 fi
 
@@ -22,6 +22,4 @@ export data_dir=$DATA_DIR
 export sequence=$DATA_DIR/${G}_canonical_sequence.txt
 bash trainer/grab_sequence.sh
 
-python trainer/create_datafile.py train $G $data_dir $sequence $splice_table
-python trainer/create_datafile.py test $G $data_dir $sequence $splice_table
-
+python trainer/create_datafile.py all $G $data_dir $sequence $splice_table
