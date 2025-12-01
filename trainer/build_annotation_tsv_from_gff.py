@@ -2,7 +2,9 @@ import gzip
 import os
 import sys
 
-FLANK_SIZE = 1000
+UPSTREAM_FLANK_SIZE = 1000
+DOWNSTREAM_FLANK_SIZE = 500
+MIN_FLANK_SIZE = 200
 
 genome_id = sys.argv[1]
 path = sys.argv[2]
@@ -127,23 +129,33 @@ with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
         start = exon_starts[0]
         end = exon_ends[-1]
 
-        # skip genes at the ends of a contig
-        if start < FLANK_SIZE:
-            continue
-        if end > inferred_contig_sizes[chrom]-FLANK_SIZE:
-            continue
-
-        # Add flank of size FLANK_SIZE, but not beyond neighboring genes
+        # Add flanks, but not beyond neighboring genes or contig boundaries
         idx = breakpoints[key].index(start)
-        start = max(start-FLANK_SIZE, breakpoints[key][idx-1] if idx > 0 else 0)
+        neighbor_start = breakpoints[key][idx-1] if idx > 0 else 1
+        if strand == '+':
+            flank_start = max(start-UPSTREAM_FLANK_SIZE, neighbor_start, 1)
+        else:
+            flank_start = max(start-DOWNSTREAM_FLANK_SIZE, neighbor_start, 1)
+
         idx = breakpoints[key].index(end)
-        end = min(end+FLANK_SIZE, breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 else 1e10)
+        neighbor_end = breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 \
+                                               else inferred_contig_sizes[chrom]
+        if strand == '+':
+            flank_end = min(end+DOWNSTREAM_FLANK_SIZE, neighbor_end, inferred_contig_sizes[chrom])
+        else:
+            flank_end = min(end+UPSTREAM_FLANK_SIZE, neighbor_end, inferred_contig_sizes[chrom])
+
+        # Skip genes with insufficient flanking sequence at contig boundaries
+        if start - flank_start < MIN_FLANK_SIZE and flank_start == 1:
+            continue
+        if flank_end - end < MIN_FLANK_SIZE and flank_end == inferred_contig_sizes[chrom]:
+            continue
 
         print(name.replace('"', ''),  # gene name
               0,  # paralogous, not used in downstream code
               chrom,
               strand,
-              start, end,
+              flank_start, flank_end,
               ''.join(f'{x},' for x in exon_ends),
                ''.join(f'{x},' for x in exon_starts),
               sep='\t', file=f)
