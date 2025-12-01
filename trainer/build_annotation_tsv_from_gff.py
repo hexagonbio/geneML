@@ -23,7 +23,7 @@ else:
 
 data = {}
 inferred_contig_sizes = {}
-breakpoints = {}
+extents_by_cs = {}
 mitochondrial_contigs = set()
 
 # First pass: identify mitochondrial contigs from region features
@@ -105,13 +105,22 @@ with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f
             data[key] = []
         data[key].append(tuple([start, end]))
 
-        key = chrom, strand
-        if key not in breakpoints:
-            breakpoints[key] = []
-        breakpoints[key].extend([start, end])
+        # We'll compute neighbour boundaries using non-overlapping gene extents
+        # (start of first exon, end of last exon) per (chrom, strand, id)
 
-for v in breakpoints.values():
-    v.sort()
+# Build per-(chrom, strand) lists of (start, end, name) extents
+for (chrom, strand, name), exons in data.items():
+    exons.sort()
+    start = exons[0][0]
+    end = exons[-1][1]
+    key_cs = (chrom, strand)
+    if key_cs not in extents_by_cs:
+        extents_by_cs[key_cs] = []
+    extents_by_cs[key_cs].append((start, end, name))
+
+for key_cs in extents_by_cs:
+    # Sort by start for deterministic traversal
+    extents_by_cs[key_cs].sort(key=lambda x: x[0])
 
 with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
     for (chrom, strand, name), exons in sorted(data.items()):
@@ -129,21 +138,30 @@ with open(os.path.join(data_dir, f'{genome_id}.tsv'), 'w') as f:
         start = exon_starts[0]
         end = exon_ends[-1]
 
-        # Add flanks, but not beyond neighboring genes or contig boundaries
-        idx = breakpoints[key].index(start)
-        neighbor_start = breakpoints[key][idx-1] if idx > 0 else 1
-        if strand == '+':
-            flank_start = max(start-UPSTREAM_FLANK_SIZE, neighbor_start, 1)
-        else:
-            flank_start = max(start-DOWNSTREAM_FLANK_SIZE, neighbor_start, 1)
+        # Add flanks, but not beyond non-overlapping neighbouring genes or contig boundaries
+        # Define upstream neighbour as the closest gene whose end < start
+        # Define downstream neighbour as the closest gene whose start > end
+        upstream_bound = 1
+        downstream_bound = inferred_contig_sizes[chrom]
 
-        idx = breakpoints[key].index(end)
-        neighbor_end = breakpoints[key][idx+1] if idx < len(breakpoints[key])-2 \
-                                               else inferred_contig_sizes[chrom]
+        for s2, e2, name2 in extents_by_cs.get(key, []):
+            if name2 == name:
+                continue
+            # Only consider non-overlapping intervals as neighbours on same strand
+            if e2 < start:
+                if e2 > upstream_bound:
+                    upstream_bound = e2
+            elif s2 > end:
+                if s2 < downstream_bound:
+                    downstream_bound = s2
+            # Overlapping intervals (isoforms at same locus) are ignored
+
         if strand == '+':
-            flank_end = min(end+DOWNSTREAM_FLANK_SIZE, neighbor_end, inferred_contig_sizes[chrom])
+            flank_start = max(start - UPSTREAM_FLANK_SIZE, upstream_bound, 1)
+            flank_end = min(end + DOWNSTREAM_FLANK_SIZE, downstream_bound, inferred_contig_sizes[chrom])
         else:
-            flank_end = min(end+UPSTREAM_FLANK_SIZE, neighbor_end, inferred_contig_sizes[chrom])
+            flank_start = max(start - DOWNSTREAM_FLANK_SIZE, upstream_bound, 1)
+            flank_end = min(end + UPSTREAM_FLANK_SIZE, downstream_bound, inferred_contig_sizes[chrom])
 
         # Skip genes with insufficient flanking sequence at contig boundaries
         if start - flank_start < MIN_FLANK_SIZE and flank_start == 1:
