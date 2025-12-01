@@ -31,11 +31,12 @@ NAME = []      # Gene symbol
 PARALOG = []   # 0 if no paralogs exist, 1 otherwise
 CHROM = []     # Chromosome number
 STRAND = []    # Strand in which the gene lies (+ or -)
-CDS_START = []  # Position where cds starts
-CDS_END = []    # Position where cds ends
-JN_START = []  # Positions where canonical exons end
-JN_END = []    # Positions where canonical exons start
+CDS_START = []  # Genomic position where cds starts
+CDS_END = []    # Genomic position where cds ends
+JN_START = []  # Genomic positions where canonical exons end
+JN_END = []    # Genomic positions where canonical exons start
 SEQ = []       # Nucleotide sequence
+SEQ_START = [] # Genomic position where sequence starts
 
 fpr2 = open(sequence, 'r')
 
@@ -69,6 +70,7 @@ with open(splice_table, 'r') as fpr1:
         JN_START.append(data1[6::2])
         JN_END.append(data1[7::2])
         SEQ.append(data2[3])
+        SEQ_START.append(data2[1])  # Genomic start of the sequence
 
 fpr1.close()
 fpr2.close()
@@ -93,6 +95,7 @@ h5f.create_dataset('CDS_END', data=asarray(CDS_END))
 h5f.create_dataset('JN_START', data=asarray(JN_START))
 h5f.create_dataset('JN_END', data=asarray(JN_END))
 h5f.create_dataset('SEQ', data=asarray(SEQ))
+h5f.create_dataset('SEQ_START', data=asarray(SEQ_START))
 
 h5f.close()
 
