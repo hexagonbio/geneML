@@ -81,6 +81,7 @@ for datafile in datafiles:
     CDS_END = h5f['CDS_END'][:]
     JN_START = h5f['JN_START'][:]
     JN_END = h5f['JN_END'][:]
+    SEQ_START = h5f['SEQ_START'][:]
     h5f.close()
 
     total_chunks = SEQ.shape[0]//CHUNK_SIZE
@@ -112,6 +113,7 @@ for datafile in datafiles:
                 SEQ[idx], STRAND[idx],
                 CDS_START[idx], CDS_END[idx],
                 JN_START[idx], JN_END[idx],
+                SEQ_START[idx],
                 SL=args.SL, CL_max=args.CL_max, num_classes=args.num_classes,
             )
 
