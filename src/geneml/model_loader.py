@@ -42,7 +42,7 @@ class ResidualModelBase:
         seq = seq.upper().replace('A', '\x01').replace('C', '\x02')
         seq = seq.replace('G', '\x03').replace('T', '\x04').replace('N', '\x00')
 
-        return map[np.fromstring(seq, np.int8) % 5]
+        return map[np.frombuffer(seq.encode('ascii'), np.int8) % 5]
 
     def specify_model_parameters(self):
         """
