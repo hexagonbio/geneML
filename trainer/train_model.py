@@ -65,11 +65,11 @@ def get_args():
         type=int,
         default=1,
     )
-#    parser.add_argument(
-#        '--batch-size',
-#        default=128,
-#        type=int,
-#        help='number of records to read during each training step, default=128')
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Batch size per GPU. If not specified, will auto-tune based on available VRAM.')
 #    parser.add_argument(
 #        '--learning-rate',
 #        default=.01,
@@ -125,45 +125,45 @@ def main():
 
     W = None
     AR = None
-    BATCH_SIZE = None
+    DEFAULT_BATCH_SIZE = None  # Default batch size for auto-tuning starting point
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1])
-        BATCH_SIZE = 18*N_GPUS
+        DEFAULT_BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 240:
         W = np.asarray([11, 11, 11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
+        DEFAULT_BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 400:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
+        DEFAULT_BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 768:
         W =  np.asarray([5,  5,  7,  11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  2,  2,  4,  4,  8,  16, 1])
-        BATCH_SIZE = 18*N_GPUS
+        DEFAULT_BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 800:
         W =  np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
-        BATCH_SIZE = 18*N_GPUS
+        DEFAULT_BATCH_SIZE = 18*N_GPUS
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10])
-        BATCH_SIZE = 12*N_GPUS
+        DEFAULT_BATCH_SIZE = 12*N_GPUS
     elif int(args.context_length) == 5360:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 29, 29, 29, 29])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10, 15, 15, 15, 15])
-        BATCH_SIZE = 8*N_GPUS
+        DEFAULT_BATCH_SIZE = 8*N_GPUS
     elif int(args.context_length) == 10080:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 41, 41, 41, 41])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10, 25, 25, 25, 25])
-        BATCH_SIZE = 6*N_GPUS
+        DEFAULT_BATCH_SIZE = 6*N_GPUS
     else:
         assert False, 'failed: int(args.context_length) does not match any known configuration'
 
@@ -177,6 +177,13 @@ def main():
     assert CL <= CL_max and CL == int(args.context_length), 'failed: CL <= CL_max and CL == int(args.context_length)'
     tee("\033[1mContext nucleotides: %d\033[0m" % (CL))
     tee("\033[1mSequence length (output): %d\033[0m" % (SL))
+
+    # Set batch size: use user-specified value or will auto-tune later
+    if args.batch_size is not None:
+        BATCH_SIZE = args.batch_size * N_GPUS
+        tee(f"\033[1mUsing user-specified batch size: {BATCH_SIZE} ({args.batch_size} per GPU)\033[0m")
+    else:
+        BATCH_SIZE = None  # Will be set by auto-tuning
 
     if args.model_type == 'spliceai':
         num_classes = 3
@@ -225,6 +232,88 @@ def main():
     idx_all = np.random.permutation(num_idx)
     idx_train = idx_all[:int(0.9*num_idx)]
     idx_valid = idx_all[int(0.9*num_idx):]
+
+    # Auto-tune batch size if not specified
+    if args.batch_size is None:
+        tee("\n\033[1mAuto-tuning batch size...\033[0m")
+
+        def find_max_batch_size(start_batch_size):
+            """Binary search for maximum batch size that fits in VRAM"""
+            # Load a sample to test with
+            test_idx = idx_train[0]
+            X_test = h5f['X' + str(test_idx)][:]
+            Y_test = h5f['Y' + str(test_idx)][:]
+            Xc_test, Yc_test = clip_datapoints(X_test, Y_test, CL, N_GPUS, CL_max)
+
+            batch_size = start_batch_size
+            max_working = start_batch_size
+
+            # First, find upper bound by doubling
+            tee(f"Finding upper bound starting from {batch_size}...")
+            while True:
+                try:
+                    tensorflow.keras.backend.clear_session()
+
+                    # Test if this batch size fits
+                    num_samples = min(batch_size, Xc_test.shape[0])
+                    if num_samples < batch_size:
+                        tee(f"  Sample has only {num_samples} datapoints, using that as max")
+                        max_working = num_samples
+                        break
+
+                    tee(f"  Testing batch_size={batch_size}...", end=" ")
+                    model.fit(Xc_test[:num_samples], Yc_test[:num_samples],
+                             batch_size=batch_size, epochs=1, verbose=0)
+
+                    tee("✓ fits")
+                    max_working = batch_size
+                    batch_size = min(batch_size * 2, Xc_test.shape[0])  # Double it
+
+                    if batch_size == max_working:  # Can't go higher
+                        break
+
+                except (tensorflow.errors.ResourceExhaustedError,
+                        tensorflow.errors.InternalError):
+                    tee("✗ OOM")
+                    # Now binary search between max_working and batch_size
+                    break
+
+            # Binary search to find the exact maximum
+            low = max_working
+            high = batch_size
+
+            if high > low:
+                tee(f"Binary searching between {low} and {high}...")
+                while high - low > N_GPUS * 4:  # Stop when difference is small
+                    mid = (low + high) // 2
+                    # Round to multiple of N_GPUS for clean distribution
+                    mid = (mid // N_GPUS) * N_GPUS
+
+                    try:
+                        tensorflow.keras.backend.clear_session()
+                        tee(f"  Testing batch_size={mid}...", end=" ")
+                        num_samples = min(mid, Xc_test.shape[0])
+                        model.fit(Xc_test[:num_samples], Yc_test[:num_samples],
+                                 batch_size=mid, epochs=1, verbose=0)
+                        tee("✓ fits")
+                        low = mid
+                    except (tensorflow.errors.ResourceExhaustedError,
+                            tensorflow.errors.InternalError):
+                        tee("✗ OOM")
+                        high = mid
+
+            # Clean up
+            tensorflow.keras.backend.clear_session()
+            return low
+
+        optimal_batch = find_max_batch_size(DEFAULT_BATCH_SIZE)
+        # Use 80% of max to leave headroom for variance across batches
+        BATCH_SIZE = int(optimal_batch * 0.8)
+        # Round to multiple of N_GPUS
+        BATCH_SIZE = (BATCH_SIZE // N_GPUS) * N_GPUS
+
+        tee(f"\n\033[1m✓ Auto-tuned batch size: {BATCH_SIZE} ({BATCH_SIZE // N_GPUS} per GPU)\033[0m")
+        tee(f"  (Using 80% of max {optimal_batch} for safety margin)\n")
 
     num_batches = args.num_epochs*len(idx_train)
 
