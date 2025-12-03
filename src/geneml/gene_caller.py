@@ -307,6 +307,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             num_stop_codons = count_stop_codons(new_cds)
             is_valid = (num_stop_codons == 1 and
                        len(new_cds) % 3 == 0 and
+                       starts_with_start_codon(new_cds) and
                        ends_with_stop_codon(new_cds))
             if is_valid:
                 results.append(gene.copy())
