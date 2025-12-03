@@ -139,7 +139,7 @@ def process_genome(params: Params):
     for record in seqio.parse(params.inpath):
         if params.contigs_filter is not None and record.id not in params.contigs_filter:
             continue
-        seq = str(record.seq)
+        seq = str(record.seq).upper()
         contigs[record.id] = seq
         genome_size += len(seq)
 

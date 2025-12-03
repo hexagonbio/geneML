@@ -288,7 +288,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
                 return num_ops      # Further exon ends are also expected to be inconsistent
 
             # Build CDS incrementally - extract current exon sequence
-            exon_seq = seq[exon_start:exon_end].upper()
+            exon_seq = seq[exon_start:exon_end]
             new_cds = current_cds + exon_seq
 
             # For EXON_END, check for premature stop codons to prune invalid paths early
