@@ -238,22 +238,22 @@ def main():
                 Y_true[i][t].extend(Yc[t][is_expr, :, i].flatten())
                 Y_pred[i][t].extend(Yp[t][is_expr, :, i].flatten())
 
-            tee("\n\033[1mAcceptor:\033[0m")
-            acceptor_score = print_topl_statistics(np.asarray(Y_true[1][t]), np.asarray(Y_pred[1][t]), print_fn=tee)
+        tee("\n\033[1mAcceptor:\033[0m")
+        acceptor_score = print_topl_statistics(np.asarray(Y_true[1][t]), np.asarray(Y_pred[1][t]), print_fn=tee)
 
-            tee("\n\033[1mDonor:\033[0m")
-            donor_score = print_topl_statistics(np.asarray(Y_true[2][t]), np.asarray(Y_pred[2][t]), print_fn=tee)
+        tee("\n\033[1mDonor:\033[0m")
+        donor_score = print_topl_statistics(np.asarray(Y_true[2][t]), np.asarray(Y_pred[2][t]), print_fn=tee)
 
-            tee("\n\033[1mCDS start:\033[0m")
-            print_topl_statistics(np.asarray(Y_true[3][t]), np.asarray(Y_pred[3][t]), print_fn=tee)
+        tee("\n\033[1mCDS start:\033[0m")
+        print_topl_statistics(np.asarray(Y_true[3][t]), np.asarray(Y_pred[3][t]), print_fn=tee)
 
-            tee("\n\033[1mCDS end:\033[0m")
-            print_topl_statistics(np.asarray(Y_true[4][t]), np.asarray(Y_pred[4][t]), print_fn=tee)
+        tee("\n\033[1mCDS end:\033[0m")
+        print_topl_statistics(np.asarray(Y_true[4][t]), np.asarray(Y_pred[4][t]), print_fn=tee)
 
-            tee("\n\033[1mis_exon:\033[0m")
-            print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
+        tee("\n\033[1mis_exon:\033[0m")
+        print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
 
-            return acceptor_score, donor_score
+        return acceptor_score, donor_score
 
     for batch_idx in range(num_batches):
 
