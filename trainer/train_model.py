@@ -3,6 +3,7 @@
 ###############################################################################
 
 import argparse
+import gc
 import os
 import re
 import sys
@@ -242,6 +243,9 @@ def main():
                 Y_true[i][t].extend(Yc[t][is_expr, :, i].flatten())
                 Y_pred[i][t].extend(Yp[t][is_expr, :, i].flatten())
 
+            # Explicitly free large arrays from memory
+            del X, Y, Xc, Yc, Yp
+
         tee("\n\033[1mAcceptor:\033[0m")
         acceptor_score = print_topl_statistics(np.asarray(Y_true[1][t]), np.asarray(Y_pred[1][t]), print_fn=tee)
 
@@ -256,6 +260,9 @@ def main():
 
         tee("\n\033[1mis_exon:\033[0m")
         print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
+
+        # Explicitly free large metric arrays
+        del Y_true, Y_pred
 
         return acceptor_score, donor_score
 
@@ -300,6 +307,10 @@ def main():
             if epoch_num >= 6:
                 K.set_value(model.optimizer.learning_rate, 0.5 * K.get_value(model.optimizer.learning_rate))
                 # Learning rate decay
+
+            # Clear memory after metrics printing
+            gc.collect()
+            tensorflow.keras.backend.clear_session()
 
             if acceptor_score < 0.1 and donor_score < 0.1:
                 tee('Weak training--exiting early')
