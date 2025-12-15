@@ -12,13 +12,14 @@ from geneml.types import CDS_END, CDS_START, EXON_END, EXON_START, Exon, Gene, G
 logger = logging.getLogger("geneml")
 
 
-def run_model(model: ResidualModelBase, seq: str, chunk_size=100000, padding=1000):
+def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100000):
     """
     Predicts the sequence in chunks of a given size to control memory usage, with some padding to handle
     the sequence context
     """
     seq_len = len(seq)
     pred_list = []
+    padding = context_length // 2
     for i in range(0, seq_len, chunk_size):
         start = i
         end = min(seq_len, i + chunk_size)

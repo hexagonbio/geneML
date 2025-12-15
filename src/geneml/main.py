@@ -89,12 +89,12 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     rc_seq = None
     if params.strand is not Strand.REVERSE:
         logger.info('%s 1/5: Running model on forward strand', contig_id)
-        preds = run_model(model, seq)
+        preds = run_model(model, seq, params.context_length)
 
     if params.strand is not Strand.FORWARD:
         logger.info('%s 2/5: Running model on reverse strand', contig_id)
         rc_seq = reverse_complement(seq)
-        rc_preds = run_model(model, rc_seq)
+        rc_preds = run_model(model, rc_seq, params.context_length)
 
     if params.output_segs:
         segs = str(build_prediction_scores_seg(contig_id, preds, rc_preds))

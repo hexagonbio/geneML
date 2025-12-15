@@ -63,7 +63,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
 
     params_dict = {
         'model_path': args.model,
-        'context_length': args.context_length,
+        'context_length': args.context_length if args.context_length else 800,
         'strand': Strand(args.strand),
 
         'contigs_filter': args.contigs_filter.split(',') if args.contigs_filter else None,
