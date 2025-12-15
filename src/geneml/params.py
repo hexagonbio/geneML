@@ -29,6 +29,7 @@ class Params(namedtuple('Params', (
     'hardmask_repeats_min_size', 'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
     'max_transcripts', 'allow_opposite_strand_overlaps',
     'min_exon_size', 'max_exon_size', 'dynamic_scoring',
+    'cpu_only',
 ))):
     def to_json(self, **kwargs):
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
@@ -94,6 +95,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
 
         'single_recurse_max_num_ops': 100000,
         'recurse_region_max_num_ops': 200000,
+        'cpu_only': args.cpu_only,
     }
 
     return Params(*[params_dict[name] for name in Params._fields])

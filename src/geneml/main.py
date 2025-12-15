@@ -74,6 +74,9 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     """
     start_time = time.time()
 
+    if params.cpu_only:
+        tf.config.set_visible_devices([], 'GPU')
+
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
@@ -239,6 +242,7 @@ def parse_args(argv=None):
     advanced = parser.add_argument_group("advanced options")
     advanced.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode.")
     advanced.add_argument('-d', '--debug', action='store_true', help="Enable debug mode.")
+    advanced.add_argument('--cpu-only', action='store_true', help="Use CPU only for inference, disable GPU usage.")
     advanced.add_argument('--strand', type=str, choices=[x.value for x in Strand], default='both', help="On which strand to predict genes (default: %(default)s).")
     advanced.add_argument('--contigs-filter', type=str, help="Run only on selected contigs (comma separated string).")
     advanced.add_argument('--write-raw-scores', action='store_true', help="Instead of running gene calling, output the raw model scores as a .seg file.")
