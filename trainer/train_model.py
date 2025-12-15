@@ -213,7 +213,11 @@ def main():
 
     start_time = time.time()
 
-    def print_performance_metrics(indices):
+    def print_performance_metrics(indices, max_eval=512):
+        # Cap evaluated samples to avoid excessive memory use during metrics
+        if len(indices) > max_eval:
+            indices = np.random.choice(indices, max_eval, replace=False)
+
         Y_true = []
         for i in range(6):
             Y_true.append([[] for t in range(1)])
@@ -226,7 +230,7 @@ def main():
             Y = h5f['Y' + str(idx)][:]
 
             Xc, Yc = clip_datapoints(X, Y, CL, N_GPUS, CL_max)
-            Yp = model.predict(Xc, batch_size=BATCH_SIZE)
+            Yp = model.predict(Xc, batch_size=BATCH_SIZE, verbose=0)
 
             if not isinstance(Yp, list):
                 Yp = [Yp]
@@ -238,22 +242,22 @@ def main():
                 Y_true[i][t].extend(Yc[t][is_expr, :, i].flatten())
                 Y_pred[i][t].extend(Yp[t][is_expr, :, i].flatten())
 
-            tee("\n\033[1mAcceptor:\033[0m")
-            acceptor_score = print_topl_statistics(np.asarray(Y_true[1][t]), np.asarray(Y_pred[1][t]), print_fn=tee)
+        tee("\n\033[1mAcceptor:\033[0m")
+        acceptor_score = print_topl_statistics(np.asarray(Y_true[1][t]), np.asarray(Y_pred[1][t]), print_fn=tee)
 
-            tee("\n\033[1mDonor:\033[0m")
-            donor_score = print_topl_statistics(np.asarray(Y_true[2][t]), np.asarray(Y_pred[2][t]), print_fn=tee)
+        tee("\n\033[1mDonor:\033[0m")
+        donor_score = print_topl_statistics(np.asarray(Y_true[2][t]), np.asarray(Y_pred[2][t]), print_fn=tee)
 
-            tee("\n\033[1mCDS start:\033[0m")
-            print_topl_statistics(np.asarray(Y_true[3][t]), np.asarray(Y_pred[3][t]), print_fn=tee)
+        tee("\n\033[1mCDS start:\033[0m")
+        print_topl_statistics(np.asarray(Y_true[3][t]), np.asarray(Y_pred[3][t]), print_fn=tee)
 
-            tee("\n\033[1mCDS end:\033[0m")
-            print_topl_statistics(np.asarray(Y_true[4][t]), np.asarray(Y_pred[4][t]), print_fn=tee)
+        tee("\n\033[1mCDS end:\033[0m")
+        print_topl_statistics(np.asarray(Y_true[4][t]), np.asarray(Y_pred[4][t]), print_fn=tee)
 
-            tee("\n\033[1mis_exon:\033[0m")
-            print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
+        tee("\n\033[1mis_exon:\033[0m")
+        print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
 
-            return acceptor_score, donor_score
+        return acceptor_score, donor_score
 
     for batch_idx in range(num_batches):
 
