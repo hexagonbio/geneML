@@ -132,41 +132,41 @@ def main():
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
     elif int(args.context_length) == 240:
         W = np.asarray([11, 11, 11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
     elif int(args.context_length) == 400:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
     elif int(args.context_length) == 768:
         W =  np.asarray([5,  5,  7,  11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  2,  2,  4,  4,  8,  16, 1])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
     elif int(args.context_length) == 800:
         W =  np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10])
-        BATCH_SIZE = 12*N_GPUS
+        BATCH_SIZE = 48*N_GPUS
     elif int(args.context_length) == 5360:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 29, 29, 29, 29])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10, 15, 15, 15, 15])
-        BATCH_SIZE = 8*N_GPUS
+        BATCH_SIZE = 32*N_GPUS
     elif int(args.context_length) == 10080:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 41, 41, 41, 41])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10, 25, 25, 25, 25])
-        BATCH_SIZE = 6*N_GPUS
+        BATCH_SIZE = 24*N_GPUS
     else:
         assert False, 'failed: int(args.context_length) does not match any known configuration'
 
