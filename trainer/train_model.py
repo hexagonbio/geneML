@@ -55,6 +55,19 @@ def get_args():
         type=int,
         default=1,
     )
+    parser.add_argument(
+        '--max-eval-samples',
+        type=int,
+        default=64,
+        help='Maximum number of samples to evaluate metrics on per split (default: %(default)s)',
+    )
+    parser.add_argument(
+        '--eval-every',
+        type=int,
+        default=1,
+        help='Run evaluation every N epochs (default: %(default)s).' \
+             'Always evaluates on first and last epochs.',
+    )
 #    parser.add_argument(
 #        '--batch-size',
 #        default=128,
@@ -214,7 +227,7 @@ def main():
 
     start_time = time.time()
 
-    def print_performance_metrics(indices, max_eval=512):
+    def print_performance_metrics(indices, max_eval):
         # Cap evaluated samples to avoid excessive memory use during metrics
         if len(indices) > max_eval:
             indices = np.random.choice(indices, max_eval, replace=False)
@@ -278,43 +291,53 @@ def main():
 
         if (batch_idx+1) % len(idx_train) == 0:
             epoch_num = (batch_idx+1) // len(idx_train)
-            # Printing metrics (see utils.py for details)
-
+            is_first_epoch = (epoch_num == 1)
+            is_last_epoch = (epoch_num == args.num_epochs)
+            should_eval = is_first_epoch or is_last_epoch or ((epoch_num - 1) % args.eval_every == 0)
             tee("--------------------------------------------------------------")
             tee("epoch_num:", epoch_num)
-            tee("\n\033[1mValidation set metrics:\033[0m")
-            acceptor_score, donor_score = print_performance_metrics(idx_valid)
 
-            tee("\n\033[1mTraining set metrics:\033[0m")
-            print_performance_metrics(idx_train[:len(idx_valid)])
+            if should_eval:
+                # Printing metrics (see utils.py for details)
+                tee("\n\033[1mValidation set metrics:\033[0m")
+                acceptor_score, donor_score = print_performance_metrics(idx_valid, args.max_eval_samples)
 
-            from tensorflow.python.keras import backend
-            K = backend
-            tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
-            tee("--- %s seconds ---" % (time.time() - start_time))
-            start_time = time.time()
+                tee("\n\033[1mTraining set metrics:\033[0m")
+                print_performance_metrics(idx_train[:len(idx_valid)], args.max_eval_samples)
 
-            tee("--------------------------------------------------------------")
-            sys.stdout.flush()
+                from tensorflow.python.keras import backend
+                K = backend
+                tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
+                tee("--- %s seconds ---" % (time.time() - start_time))
+                start_time = time.time()
 
-            filename = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + f'_ep{epoch_num}.h5')
-            tee.f.flush()
+                tee("--------------------------------------------------------------")
+                sys.stdout.flush()
 
-            os.makedirs(args.keras_save_path, exist_ok=True)
-            local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
-            model.save(local_path_keras)
+                filename = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + f'_ep{epoch_num}.h5')
+                tee.f.flush()
 
-            if epoch_num >= 6:
-                K.set_value(model.optimizer.learning_rate, 0.5 * K.get_value(model.optimizer.learning_rate))
-                # Learning rate decay
+                os.makedirs(args.keras_save_path, exist_ok=True)
+                local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
+                model.save(local_path_keras)
 
-            # Clear memory after metrics printing
-            gc.collect()
-            tensorflow.keras.backend.clear_session()
+                if epoch_num >= 6:
+                    K.set_value(model.optimizer.learning_rate, 0.5 * K.get_value(model.optimizer.learning_rate))
+                    # Learning rate decay
 
-            if acceptor_score < 0.1 and donor_score < 0.1:
-                tee('Weak training--exiting early')
-                sys.exit(0)
+                # Clear memory after metrics printing
+                gc.collect()
+                tensorflow.keras.backend.clear_session()
+
+                if acceptor_score < 0.1 and donor_score < 0.1:
+                    tee('Weak training--exiting early')
+                    sys.exit(0)
+            else:
+                tee(f"Skipping evaluation this epoch (eval_every={args.eval_every})")
+                tee("--- %s seconds ---" % (time.time() - start_time))
+                start_time = time.time()
+                tee("--------------------------------------------------------------")
+                sys.stdout.flush()
 
     h5f.close()
 
