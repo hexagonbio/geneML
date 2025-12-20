@@ -51,6 +51,10 @@ with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f
         if skip_line:
             continue
 
+        # Skip pseudogenes
+        if info.get('pseudo') == 'true' or 'pseudogene' in info:
+            continue
+
         if 'ID' in info:
             # ID=cds-XP_024343564.1 in GCF_002117355.1 gff
             if '-' in info['ID']:
