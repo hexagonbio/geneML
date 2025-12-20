@@ -20,6 +20,29 @@ else:
 data = {}
 inferred_contig_sizes = {}
 breakpoints = {}
+mitochondrial_contigs = set()
+
+# First pass: identify mitochondrial contigs from region features
+with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f:
+    for line in f:
+        if line.startswith('#'):
+            continue
+        cols = line.strip().split('\t')
+        if cols[2] != 'region':
+            continue
+
+        info = {}
+        split_char = '=' if '=' in cols[8] else ' '
+        for row in cols[8].strip(';').split(';'):
+            try:
+                k, v = row.strip().split(split_char, 1)
+                info[k] = v
+            except ValueError:
+                pass
+
+        # Mark as mitochondrial if genome=mitochondrion
+        if info.get('genome', '').lower() == 'mitochondrion':
+            mitochondrial_contigs.add(cols[0])
 
 with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f:
     for line in f:
@@ -29,6 +52,10 @@ with open(path) if not path.endswith('.gz') else gzip.open(path, mode='rt') as f
         chrom = cols[0]
         feature_type = cols[2]
         if feature_type != 'CDS':
+            continue
+
+        # Skip CDS on mitochondrial contigs
+        if chrom in mitochondrial_contigs:
             continue
 
         start = int(cols[3])
