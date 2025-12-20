@@ -14,12 +14,10 @@ if [ -f "$DATA_DIR/datafile_all_${G}.h5" ]; then
 fi
 
 genome_path=$FASTA_DIR/*$G*.f*a
-samtools faidx $genome_path
+splice_table=$TSV_DIR/$G.tsv
+new_splice_table=$TSV_DIR/new_$G.tsv
+sequence=$DATA_DIR/${G}_canonical_sequence.txt
 
-export splice_table=$TSV_DIR/$G.tsv
-export ref_genome=$genome_path
-export data_dir=$DATA_DIR
-export sequence=$DATA_DIR/${G}_canonical_sequence.txt
-bash trainer/grab_sequence.sh
-
-python trainer/create_datafile.py all $G $data_dir $sequence $splice_table
+python trainer/extract_and_validate_cds.py $genome_path $splice_table \
+    --output_splice_table $new_splice_table --output_sequence $sequence
+python trainer/create_datafile.py all $G $DATA_DIR $sequence $new_splice_table
