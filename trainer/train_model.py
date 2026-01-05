@@ -68,6 +68,18 @@ def get_args():
         help='Run evaluation every N epochs (default: %(default)s).' \
              'Always evaluates on first and last epochs.',
     )
+    parser.add_argument(
+        '--early-stopping-patience',
+        type=int,
+        default=2,
+        help='Stop training if validation metric does not improve for N consecutive evaluations (default: %(default)s). Set to 0 to disable.',
+    )
+    parser.add_argument(
+        '--early-stopping-min-delta',
+        type=float,
+        default=0.0005,
+        help='Minimum improvement in validation metric to reset patience (default: %(default)s)',
+    )
 #    parser.add_argument(
 #        '--batch-size',
 #        default=128,
@@ -227,6 +239,11 @@ def main():
 
     start_time = time.time()
 
+    # Early stopping tracking
+    best_val_score = -1.0
+    best_epoch = 0
+    patience_counter = 0
+
     def print_performance_metrics(indices, max_eval):
         # Cap evaluated samples to avoid excessive memory use during metrics
         if len(indices) > max_eval:
@@ -305,6 +322,17 @@ def main():
                 tee("\n\033[1mTraining set metrics:\033[0m")
                 print_performance_metrics(idx_train[:len(idx_valid)], args.max_eval_samples)
 
+                # Early stopping check based on average of acceptor and donor Top-1L
+                current_val_score = (acceptor_score + donor_score) / 2.0
+                if current_val_score > best_val_score + args.early_stopping_min_delta:
+                    best_val_score = current_val_score
+                    best_epoch = epoch_num
+                    patience_counter = 0
+                    tee(f"\033[92m*** New best validation score: {best_val_score:.4f} (epoch {best_epoch}) ***\033[0m")
+                else:
+                    patience_counter += 1
+                    tee(f"No improvement for {patience_counter} evaluation(s). Best: {best_val_score:.4f} (epoch {best_epoch})")
+
                 from tensorflow.python.keras import backend
                 K = backend
                 tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
@@ -332,12 +360,25 @@ def main():
                 if acceptor_score < 0.1 and donor_score < 0.1:
                     tee('Weak training--exiting early')
                     sys.exit(0)
+
+                # Early stopping: halt if patience exceeded
+                if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
+                    tee(f"\n\033[93mEarly stopping triggered after {patience_counter} evaluations without improvement.\033[0m")
+                    tee(f"\033[92mBest epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
+                    tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
+                    h5f.close()
+                    sys.exit(0)
             else:
                 tee(f"Skipping evaluation this epoch (eval_every={args.eval_every})")
                 tee("--- %s seconds ---" % (time.time() - start_time))
                 start_time = time.time()
                 tee("--------------------------------------------------------------")
                 sys.stdout.flush()
+
+    # Training completed without early stopping
+    if args.early_stopping_patience > 0:
+        tee(f"\n\033[92mTraining completed. Best epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
+        tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
 
     h5f.close()
 
