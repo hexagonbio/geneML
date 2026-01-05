@@ -101,10 +101,19 @@ def get_args():
 def main():
     os.environ["TF_USE_LEGACY_KERAS"] = "0"  # use keras v3 even though we have tf_keras installed
 
+    import random
+
     import h5py
     import keras
     import numpy as np
     import tensorflow
+
+    # Set random seeds for reproducibility
+    SEED = 42
+    random.seed(SEED)
+    np.random.seed(SEED)
+    tensorflow.random.set_seed(SEED)
+    os.environ['PYTHONHASHSEED'] = str(SEED)
 
     # works locally and on Vertex AI
     from model import GeneML
