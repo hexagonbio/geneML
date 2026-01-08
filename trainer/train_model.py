@@ -226,6 +226,14 @@ def main():
 
     print("Num GPUs Available: ", len(tensorflow.config.list_physical_devices('GPU')))
 
+    # Enable GPU memory growth to avoid pre-allocating all VRAM
+    try:
+        gpus = tensorflow.config.list_physical_devices('GPU')
+        for gpu in gpus:
+            tensorflow.config.experimental.set_memory_growth(gpu, True)
+    except Exception:
+        pass
+
     if N_GPUS > 1:
         # https://keras.io/guides/distributed_training/
         strategy = tensorflow.distribute.MirroredStrategy()
