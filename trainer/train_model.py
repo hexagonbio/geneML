@@ -252,6 +252,12 @@ def main():
 
     num_batches = args.num_epochs*len(idx_train)
 
+    # Use a fixed validation subset across all epochs for stable metrics
+    eval_count = min(len(idx_valid), args.max_eval_samples)
+    val_eval_indices = idx_valid[:eval_count]
+    # Use a fixed training subset of the same size for comparable reporting
+    train_eval_indices = idx_train[:eval_count]
+
     start_time = time.time()
 
     # Early stopping tracking
@@ -335,10 +341,10 @@ def main():
             if should_eval:
                 # Printing metrics (see utils.py for details)
                 tee("\n\033[1mValidation set metrics:\033[0m")
-                acceptor_score, donor_score = print_performance_metrics(idx_valid, args.max_eval_samples)
+                acceptor_score, donor_score = print_performance_metrics(val_eval_indices, len(val_eval_indices))
 
                 tee("\n\033[1mTraining set metrics:\033[0m")
-                print_performance_metrics(idx_train[:len(idx_valid)], args.max_eval_samples)
+                print_performance_metrics(train_eval_indices, len(train_eval_indices))
 
                 # Early stopping check based on average of acceptor and donor Top-1L
                 current_val_score = (acceptor_score + donor_score) / 2.0
