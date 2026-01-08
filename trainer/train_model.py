@@ -58,7 +58,7 @@ def get_args():
     parser.add_argument(
         '--max-eval-samples',
         type=int,
-        default=64,
+        default=256,
         help='Maximum number of samples to evaluate metrics on per split (default: %(default)s)',
     )
     parser.add_argument(
@@ -67,6 +67,12 @@ def get_args():
         default=1,
         help='Run evaluation every N epochs (default: %(default)s).' \
              'Always evaluates on first and last epochs.',
+    )
+    parser.add_argument(
+        '--eval-batch-size',
+        type=int,
+        default=48,
+        help='Batch size to use for evaluation/prediction (default: %(default)s). Smaller values reduce GPU memory during eval.',
     )
     parser.add_argument(
         '--early-stopping-patience',
@@ -253,6 +259,9 @@ def main():
     best_epoch = 0
     patience_counter = 0
 
+    # Evaluation batch size can be smaller than training to reduce peak GPU mem
+    EVAL_BATCH_SIZE = max(1, min(BATCH_SIZE, args.eval_batch_size * N_GPUS))
+
     def print_performance_metrics(indices, max_eval):
         # Cap evaluated samples to avoid excessive memory use during metrics
         if len(indices) > max_eval:
@@ -270,7 +279,7 @@ def main():
             Y = h5f['Y' + str(idx)][:]
 
             Xc, Yc = clip_datapoints(X, Y, CL, N_GPUS, CL_max)
-            Yp = model.predict(Xc, batch_size=BATCH_SIZE, verbose=0)
+            Yp = model.predict(Xc, batch_size=EVAL_BATCH_SIZE, verbose=0)
 
             if not isinstance(Yp, list):
                 Yp = [Yp]
