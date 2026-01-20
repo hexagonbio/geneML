@@ -421,10 +421,6 @@ def main():
                 local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
                 model.save(local_path_keras)
 
-                if epoch_num >= 6:
-                    K.set_value(model.optimizer.learning_rate, 0.5 * K.get_value(model.optimizer.learning_rate))
-                    # Learning rate decay
-
                 # Clear memory after metrics printing
                 gc.collect()
                 tensorflow.keras.backend.clear_session()
