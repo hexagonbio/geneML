@@ -150,12 +150,15 @@ def main():
     # Model
     ###############################################################################
 
-    L = 32
-    N_GPUS = args.num_gpus
+    # Hyper-parameters:
+    L = 32      # Number of convolution kernels
+    W = None    # Convolution window size in each residual unit
+    AR = None   # Atrous rate in each residual unit
 
-    W = None
-    AR = None
-    BATCH_SIZE = None
+    N_GPUS = args.num_gpus
+    BATCH_SIZE = None   # Number of sequences per training step
+
+
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
         AR = np.asarray([1, 1, 1, 1])
@@ -190,11 +193,6 @@ def main():
         BATCH_SIZE = 6*N_GPUS
     else:
         assert False, 'failed: int(args.context_length) does not match any known configuration'
-
-    # Hyper-parameters:
-    # L: Number of convolution kernels
-    # W: Convolution window size in each residual unit
-    # AR: Atrous rate in each residual unit
 
     CL = 2 * np.sum(AR*(W-1))
     tee(CL, CL_max)
