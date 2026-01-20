@@ -184,6 +184,7 @@ def main():
 
     LEARNING_RATE = None    # Final learning rate
     WARMUP_EPOCHS = None    # Number of epochs for learning rate warmup
+    WEIGHT_DECAY = 0.0001   # Weight decay for Adam optimizer
 
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
@@ -283,11 +284,13 @@ def main():
         with strategy.scope():
             model = GeneML(L, W, AR, num_classes)
             model.compile(loss=loss,
-                          optimizer=keras.optimizers.Adam(learning_rate=lr_schedule))
+                          optimizer=keras.optimizers.Adam(learning_rate=lr_schedule,
+                                                          weight_decay=WEIGHT_DECAY))
     else:
         model = GeneML(L, W, AR, num_classes)
         model.compile(loss=loss,
-                      optimizer=keras.optimizers.Adam(learning_rate=lr_schedule))
+                      optimizer=keras.optimizers.Adam(learning_rate=lr_schedule,
+                                                      weight_decay=WEIGHT_DECAY))
     # model.summary()
 
     ###############################################################################
