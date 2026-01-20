@@ -17,29 +17,15 @@ IN_MAP = np.asarray([[0, 0, 0, 0],
 # One-hot encoding of the inputs: 0 is for padding, and 1, 2, 3, 4 correspond
 # to A, C, G, T respectively.
 
-OUT_MAP3 = np.asarray([[1, 0, 0],
-                      [0, 1, 0],
-                      [0, 0, 1],
-                      [0, 0, 0]])
-# One-hot encoding of the outputs: 0 is for no splice, 1 is for acceptor,
-# 2 is for donor and -1 is for padding.
-OUT_MAP5 = np.asarray([[1, 0, 0, 0, 0],
-                      [0, 1, 0, 0, 0],
-                      [0, 0, 1, 0, 0],
-                      [0, 0, 0, 1, 0],
-                      [0, 0, 0, 0, 1],
-                      [0, 0, 0, 0, 0]])
-
-OUT_MAP7 = np.asarray([[1, 0, 0, 0, 0, 0, 0],
-                      [0, 1, 0, 0, 0, 0, 0],
-                      [0, 0, 1, 0, 0, 0, 0],
-                      [0, 0, 0, 1, 0, 0, 0],
-                      [0, 0, 0, 0, 1, 0, 0],
-                      [0, 0, 0, 0, 0, 1, 0],
-                      [0, 0, 0, 0, 0, 0, 1],
-                      [0, 0, 0, 0, 0, 0, 0]])
-
-OUT_MAPS = {3: OUT_MAP3, 5: OUT_MAP5, 7: OUT_MAP7}
+# GeneML output mapping
+OUT_MAP_GENEML = np.asarray([[1, 0, 0, 0, 0, 0, 0], # 0: intergenic
+                            [0, 1, 0, 0, 0, 0, 0],  # 1: exon_start (acceptor)
+                            [0, 0, 1, 0, 0, 0, 0],  # 2: exon_end (donor)
+                            [0, 0, 0, 1, 0, 0, 0],  # 3: CDS_start
+                            [0, 0, 0, 0, 1, 0, 0],  # 4: CDS_end
+                            [0, 0, 0, 0, 0, 1, 0],  # 5: exonic
+                            [0, 0, 0, 0, 0, 0, 1],  # 6: intronic
+                            [0, 0, 0, 0, 0, 0, 0]]) # padding
 
 
 def ceil_div(x, y):
@@ -54,14 +40,65 @@ TOCHARS = b'13230031002010000434001020'
 TRANSLATION_TABLE = bytes.maketrans(FROMCHARS, TOCHARS)
 
 
-def create_datapoints(seq, strand, tx_start, tx_end, jn_start, jn_end, seq_start, SL, CL_max, num_classes):
+def _label_cds_regions(Y0, tx_start, tx_end, jn_start, jn_end, coord_transform,
+                       negative_strand=False):
+    """
+    Label CDS regions with splice site, exon, and intron annotations.
+
+    Args:
+        Y0: Label array to fill
+        tx_start: Genomic CDS start position
+        tx_end: Genomic CDS end position
+        jn_start: List of exon end positions (donors)
+        jn_end: List of exon start positions (acceptors)
+        coord_transform: Function to convert genomic coord to Y0 index
+        negative_strand: Whether this is a minus strand gene
+    """
+
+    for t in range(1):
+        # Label exonic/intronic regions
+        for exon_start, exon_end in zip(jn_end[t], jn_start[t]):
+            for c in range(exon_start, exon_end):
+                Y0[t][coord_transform(c, tx_start, tx_end)] = 5  # exonic
+        for intron_start, intron_end in zip(jn_start[t][:-1], jn_end[t][1:]):
+            for c in range(intron_start, intron_end):
+                Y0[t][coord_transform(c, tx_start, tx_end)] = 6  # intronic
+
+        # Label splice junctions
+        if negative_strand:
+            # For minus strand: genomic donor = biological acceptor, genomic acceptor = biological donor
+            for c in jn_start[t]:
+                if tx_start <= c <= tx_end:
+                    Y0[t][coord_transform(c, tx_start, tx_end)] = 1  # exon start
+            for c in jn_end[t]:
+                if tx_start <= c <= tx_end:
+                    Y0[t][coord_transform(c, tx_start, tx_end)] = 2  # exon end
+        else:
+            for c in jn_start[t]:
+                if tx_start <= c <= tx_end:
+                    Y0[t][coord_transform(c, tx_start, tx_end)] = 2  # exon end
+            for c in jn_end[t]:
+                if tx_start <= c <= tx_end:
+                    Y0[t][coord_transform(c, tx_start, tx_end)] = 1  # exon start
+
+        # Label CDS boundaries
+        if negative_strand:
+            # For minus strand: first exon (genomic) = biological end, last exon = biological start
+            Y0[t][coord_transform(jn_end[t][0], tx_start, tx_end)] = 4  # CDS end
+            Y0[t][coord_transform(jn_start[t][-1], tx_start, tx_end)] = 3  # CDS start
+        else:
+            Y0[t][coord_transform(jn_end[t][0], tx_start, tx_end)] = 3  # CDS start
+            Y0[t][coord_transform(jn_start[t][-1], tx_start, tx_end)] = 4  # CDS end
+
+
+def create_datapoints(seq, strand, tx_start, tx_end, jn_start, jn_end, seq_start, SL, CL_max):
     # This function first converts the sequence into an integer array, where
     # A, C, G, T, N are mapped to 1, 2, 3, 4, 0 respectively. If the strand is
     # negative, then reverse complementing is done. The splice junctions
-    # are also converted into an array of integers, where 0, 1, 2, -1
-    # correspond to no splicing, acceptor, donor and missing information
-    # respectively. It then calls reformat_data and one_hot_encode
-    # and returns X, Y which can be used by Keras models.
+    # are also converted into an array of integers, where 0-6 correspond to
+    # padding/intergenic, acceptor, donor, CDS start, CDS end, exonic, intronic.
+    # It then calls reformat_data and one_hot_encode and returns X, Y which
+    # can be used by Keras models.
 
     # The provided sequence (gene + meaningful flanks) is used as-is.
     # Windows are extracted with CL_max/2 context on each side of SL-sized blocks.
@@ -77,73 +114,41 @@ def create_datapoints(seq, strand, tx_start, tx_end, jn_start, jn_end, seq_start
     tx_start_rel = tx_start - seq_start  # Sequence-relative CDS start
     tx_end_rel = tx_end - seq_start      # Sequence-relative CDS end
 
-    jn_start = list(map(lambda x: list(map(int, re.split(b',', x)[:-1])), jn_start))
-    jn_end = list(map(lambda x: list(map(int, re.split(b',', x)[:-1])), jn_end))
+    def _parse_junctions(jn_raw):
+        parsed = []
+        for x in jn_raw:
+            parts = [p for p in re.split(b',', x) if p]
+            parsed.append(list(map(int, parts)))
+        return parsed
+
+    jn_start = _parse_junctions(jn_start)
+    jn_end = _parse_junctions(jn_end)
 
     if strand == b'+':
-
         X0 = np.asarray(list(map(int, list(seq.decode()))))
-        Y0 = [-np.ones(tx_end_rel-tx_start_rel+1) for t in range(1)]
+        Y0 = [np.zeros(tx_end_rel-tx_start_rel+1, dtype=int) for t in range(1)]
 
-        for t in range(1):
-
-            if len(jn_start[t]) > 0:
-                Y0[t] = np.zeros(tx_end_rel-tx_start_rel+1)
-
-                if num_classes >= 6:
-                    for exon_start, exon_end in zip(jn_end[t], jn_start[t]):
-                        for c in range(exon_start, exon_end):
-                            Y0[t][c-tx_start] = 5  # exonic
-                    for intron_start, intron_end in zip(jn_start[t][:-1], jn_end[t][1:]):
-                        for c in range(intron_start, intron_end):
-                            Y0[t][c-tx_start] = 6  # intronic
-
-                for c in jn_start[t]:
-                    if tx_start <= c <= tx_end:
-                        Y0[t][c-tx_start] = 2
-                for c in jn_end[t]:
-                    if tx_start <= c <= tx_end:
-                        Y0[t][c-tx_start] = 1
-                    # Ignoring junctions outside annotated tx start/end sites
-
-                if num_classes >= 4:
-                    Y0[t][jn_end[t][0]-tx_start] = 3  # start codon
-                    Y0[t][jn_start[t][-1]-tx_start] = 4  # stop codon
+        # For + strand: index = position - tx_start
+        def coord_transform(c, start, end):
+            return c - start
+        _label_cds_regions(Y0, tx_start, tx_end, jn_start, jn_end, coord_transform,
+                           negative_strand=False)
 
     elif strand == b'-':
-
         X0 = (5-np.asarray(list(map(int, list(seq.decode()[::-1]))))) % 5  # Reverse complement
-        Y0 = [-np.ones(tx_end_rel-tx_start_rel+1) for t in range(1)]
+        Y0 = [np.zeros(tx_end_rel-tx_start_rel+1, dtype=int) for t in range(1)]
 
-        for t in range(1):
-
-            if len(jn_start[t]) > 0:
-                Y0[t] = np.zeros(tx_end_rel-tx_start_rel+1)
-
-                if num_classes >= 6:
-                    for exon_start, exon_end in zip(jn_end[t], jn_start[t]):
-                        for c in range(exon_start, exon_end):
-                            Y0[t][tx_end-c] = 5  # exonic
-                    for intron_start, intron_end in zip(jn_start[t][:-1], jn_end[t][1:]):
-                        for c in range(intron_start, intron_end):
-                            Y0[t][tx_end-c] = 6  # intronic
-
-                for c in jn_end[t]:
-                    if tx_start <= c <= tx_end:
-                        Y0[t][tx_end-c] = 2
-                for c in jn_start[t]:
-                    if tx_start <= c <= tx_end:
-                        Y0[t][tx_end-c] = 1
-
-                if num_classes >= 4:
-                    Y0[t][tx_end-jn_start[t][-1]] = 3  # start codon
-                    Y0[t][tx_end-jn_end[t][0]] = 4  # stop codon
+        # For - strand: index = tx_end - position
+        def coord_transform(c, start, end):
+            return end - c
+        _label_cds_regions(Y0, tx_start, tx_end, jn_start, jn_end, coord_transform,
+                           negative_strand=True)
 
     else:
         assert False, 'failed: False'
 
     Xd, Yd = reformat_data(X0, Y0, SL, CL_max, tx_start_rel)
-    X, Y = one_hot_encode(Xd, Yd, num_classes)
+    X, Y = one_hot_encode(Xd, Yd)
 
     return X, Y
 
@@ -166,7 +171,7 @@ def reformat_data(X0, Y0, SL, CL_max, tx_start):
     num_points = ceil_div(len(Y0[0]), SL)
 
     Xd = np.zeros((num_points, SL+CL_max))
-    Yd = [-np.ones((num_points, SL)) for t in range(1)]
+    Yd = [np.zeros((num_points, SL), dtype=int) for t in range(1)]
 
     # Pad Y0 to cover the final partial SL segment
     Y0 = [np.pad(Y0[t], [0, SL], 'constant', constant_values=-1) for t in range(1)]
@@ -189,7 +194,7 @@ def reformat_data(X0, Y0, SL, CL_max, tx_start):
         e = min(len(X0), right)
         window = X0[s:e]
         if pad_left or pad_right:
-            window = np.pad(window, [pad_left, pad_right], mode='constant', constant_values=0)
+            window = np.pad(window, [pad_left, pad_right], mode='constant', constant_values=-1)
         Xd[i] = window
 
     for t in range(1):
@@ -199,10 +204,10 @@ def reformat_data(X0, Y0, SL, CL_max, tx_start):
     return Xd, Yd
 
 
-def one_hot_encode(Xd, Yd, num_classes):
+def one_hot_encode(Xd, Yd):
 
     return IN_MAP[Xd.astype('int8')], \
-           [OUT_MAPS[num_classes][Yd[t].astype('int8')] for t in range(1)]
+           [OUT_MAP_GENEML[Yd[t].astype('int8')] for t in range(1)]
 
 
 def print_topl_statistics(y_true, y_pred, print_fn=print):
