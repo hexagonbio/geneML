@@ -114,7 +114,7 @@ for datafile in datafiles:
                 CDS_START[idx], CDS_END[idx],
                 JN_START[idx], JN_END[idx],
                 SEQ_START[idx],
-                SL=args.SL, CL_max=args.CL_max, num_classes=args.num_classes,
+                SL=args.SL, CL_max=args.CL_max,
             )
 
             X_batch.extend(X)

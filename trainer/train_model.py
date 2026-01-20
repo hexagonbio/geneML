@@ -285,10 +285,10 @@ def main():
             indices = np.random.choice(indices, max_eval, replace=False)
 
         Y_true = []
-        for i in range(6):
+        for i in range(7):
             Y_true.append([[] for t in range(1)])
         Y_pred = []
-        for i in range(6):
+        for i in range(7):
             Y_pred.append([[] for t in range(1)])
 
         for idx in indices:
@@ -304,7 +304,7 @@ def main():
             t = 0
             is_expr = (Yc[t].sum(axis=(1, 2)) >= 1)
 
-            for i in range(6):
+            for i in range(7):
                 Y_true[i][t].extend(Yc[t][is_expr, :, i].flatten())
                 Y_pred[i][t].extend(Yp[t][is_expr, :, i].flatten())
 
@@ -325,6 +325,9 @@ def main():
 
         tee("\n\033[1mis_exon:\033[0m")
         print_basic_statistics(np.asarray(Y_true[5][t]), np.asarray(Y_pred[5][t]), print_fn=tee)
+
+        tee("\n\033[1mis_intron:\033[0m")
+        print_basic_statistics(np.asarray(Y_true[6][t]), np.asarray(Y_pred[6][t]), print_fn=tee)
 
         # Explicitly free large metric arrays
         del Y_true, Y_pred
