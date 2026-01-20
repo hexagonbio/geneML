@@ -158,6 +158,7 @@ def main():
     N_GPUS = args.num_gpus
     BATCH_SIZE = None   # Number of sequences per training step
 
+    LEARNING_RATE = None    # Final learning rate
 
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
@@ -179,12 +180,14 @@ def main():
         W =  np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
         BATCH_SIZE = 18*N_GPUS
+        LEARNING_RATE = 0.0003
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10])
         BATCH_SIZE = 12*N_GPUS
+        LEARNING_RATE = 0.0002
     elif int(args.context_length) == 10000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 41, 41, 41, 41])
@@ -238,10 +241,12 @@ def main():
         tee('Number of devices: {}'.format(strategy.num_replicas_in_sync))
         with strategy.scope():
             model = GeneML(L, W, AR, num_classes)
-            model.compile(loss=loss, optimizer='adam')
+            model.compile(loss=loss,
+                          optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
     else:
         model = GeneML(L, W, AR, num_classes)
-        model.compile(loss=loss, optimizer='adam')
+        model.compile(loss=loss,
+                      optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
     # model.summary()
 
     ###############################################################################
