@@ -2,8 +2,7 @@ import os
 from functools import cache
 
 import numpy as np
-from keras.src import backend
-from keras.src.saving import load_model, register_keras_serializable
+from keras.src.saving import load_model
 
 MODEL_EXON_START = 1
 MODEL_EXON_END = 2
@@ -18,7 +17,7 @@ class ResidualModelBase:
     def __init__(self, path, context_length):
         self.specify_model_parameters()
 
-        self.model = load_model(path)
+        self.model = load_model(path, compile=False)
         self.context_length = context_length
 
     def predict(self, seq, return_dict=True):
@@ -72,16 +71,3 @@ def get_cached_gene_ml_model(model_path, context_length):
     if not model_path:
         model_path = DEFAULT_MODEL_PATH
     return ExonIntron6ClassModel(path=model_path, context_length=context_length)
-
-
-@register_keras_serializable()
-def categorical_crossentropy_2d_gene_ml(y_true, y_pred):
-    # Standard categorical cross entropy for sequence outputs
-    kb = backend
-    return - kb.mean(y_true[:, :, 0]*kb.log(y_pred[:, :, 0]+1e-10)
-                     + y_true[:, :, 1]*kb.log(y_pred[:, :, 1]+1e-10)
-                     + y_true[:, :, 2]*kb.log(y_pred[:, :, 2]+1e-10)
-                     + y_true[:, :, 3]*kb.log(y_pred[:, :, 3]+1e-10)
-                     + y_true[:, :, 4]*kb.log(y_pred[:, :, 4]+1e-10)
-                     + y_true[:, :, 5]*kb.log(y_pred[:, :, 5]+1e-10)
-                     + y_true[:, :, 6]*kb.log(y_pred[:, :, 6]+1e-10))
