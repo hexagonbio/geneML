@@ -199,28 +199,6 @@ def reformat_data(X0, Y0, SL, CL_max, tx_start):
     return Xd, Yd
 
 
-def clip_datapoints(X, Y, CL, N_GPUS, CL_max):
-    # This function is necessary to make sure of the following:
-    # (i) Each time model_m.fit is called, the number of datapoints is a
-    # multiple of N_GPUS. Failure to ensure this often results in crashes.
-    # (ii) If the required context length is less than CL_max, then
-    # appropriate clipping is done below.
-    # Additionally, Y is also converted to a list (the .h5 files store
-    # them as an array).
-
-    rem = X.shape[0] % N_GPUS
-    clip = (CL_max-CL)//2
-
-    if rem != 0 and clip != 0:
-        return X[:-rem, clip:-clip], [Y[t][:-rem] for t in range(1)]
-    elif rem == 0 and clip != 0:
-        return X[:, clip:-clip], [Y[t] for t in range(1)]
-    elif rem != 0 and clip == 0:
-        return X[:-rem], [Y[t][:-rem] for t in range(1)]
-    else:
-        return X, [Y[t] for t in range(1)]
-
-
 def one_hot_encode(Xd, Yd, num_classes):
 
     return IN_MAP[Xd.astype('int8')], \
