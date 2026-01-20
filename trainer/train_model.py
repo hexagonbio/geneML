@@ -9,8 +9,6 @@ import re
 import sys
 import time
 
-# from lib.genes.gene_ml import loss_functions
-
 
 def get_args():
     """Argument parser.
@@ -35,11 +33,6 @@ def get_args():
             type=str,
             required=True,
             )
-    parser.add_argument(
-        '--model-type',
-        type=str, choices=['spliceai', 'gene_ml'],
-        required=True,
-    )
     parser.add_argument(
         '--keras-save-path',
         type=str,
@@ -86,20 +79,6 @@ def get_args():
         default=0.0005,
         help='Minimum improvement in validation metric to reset patience (default: %(default)s)',
     )
-#    parser.add_argument(
-#        '--batch-size',
-#        default=128,
-#        type=int,
-#        help='number of records to read during each training step, default=128')
-#    parser.add_argument(
-#        '--learning-rate',
-#        default=.01,
-#        type=float,
-#        help='learning rate for gradient descent, default=.01')
-#    parser.add_argument(
-#        '--verbosity',
-#        choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
-#        default='INFO')
     args, _ = parser.parse_known_args()
     return args
 
@@ -123,7 +102,7 @@ def main():
 
     # works locally and on Vertex AI
     from model import GeneML
-    from utils import clip_datapoints, print_basic_statistics, print_topl_statistics
+    from utils import print_basic_statistics, print_topl_statistics
 
 
     @keras.saving.register_keras_serializable()
@@ -167,7 +146,6 @@ def main():
     tee.f = open(local_logpath, 'w')
 
     assert args.train_path, 'failed: args.train_path'
-    CL_max = int(os.path.basename(args.train_path).split('_')[2])
     SL = int(os.path.basename(args.train_path).split('_')[3])
 
     ###############################################################################
@@ -226,33 +204,26 @@ def main():
         assert False, 'failed: int(args.context_length) does not match any known configuration'
 
     CL = 2 * np.sum(AR*(W-1))
-    tee(CL, CL_max)
-    assert CL <= CL_max and CL == int(args.context_length), 'failed: CL <= CL_max and CL == int(args.context_length)'
+    assert CL == int(args.context_length), 'Context length of model (%d) does not match argument (%d)' % (CL, int(args.context_length))
     tee("\033[1mContext nucleotides: %d\033[0m" % (CL))
     tee("\033[1mSequence length (output): %d\033[0m" % (SL))
 
-    if args.model_type == 'spliceai':
-        num_classes = 3
-        # loss = loss_functions.categorical_crossentropy_2d
-        assert False, 'failed: False'
-    elif args.model_type == 'gene_ml':
-        @keras.saving.register_keras_serializable()
-        def categorical_crossentropy_2d_gene_ml(y_true, y_pred):
-            kb = keras.ops
+    @keras.saving.register_keras_serializable()
+    def categorical_crossentropy_2d_gene_ml(y_true, y_pred):
+        kb = keras.ops
 
-            # Mask for non-padding positions (sum over classes > 0)
-            mask = kb.sum(y_true, axis=-1) > 0
-            mask = kb.cast(mask, y_pred.dtype)
+        # Mask for non-padding positions (sum over classes > 0)
+        mask = kb.sum(y_true, axis=-1) > 0
+        mask = kb.cast(mask, y_pred.dtype)
 
-            loss_per_pos = -kb.sum(y_true * kb.log(y_pred + 1e-10), axis=-1)
-            masked_loss = loss_per_pos * mask
-            loss = kb.sum(masked_loss) / (kb.sum(mask) + 1e-8)
-            return loss
+        loss_per_pos = -kb.sum(y_true * kb.log(y_pred + 1e-10), axis=-1)
+        masked_loss = loss_per_pos * mask
+        loss = kb.sum(masked_loss) / (kb.sum(mask) + 1e-8)
+        return loss
 
-        num_classes = 7
-        loss = categorical_crossentropy_2d_gene_ml
-    else:
-        assert False, 'failed: False'
+    num_classes = 7
+    loss = categorical_crossentropy_2d_gene_ml
+
     h5f = h5py.File(args.train_path, 'r')
 
     num_idx = len(h5f.keys())//2
@@ -336,7 +307,7 @@ def main():
             X = h5f['X' + str(idx)][:]
             Y = h5f['Y' + str(idx)][:]
 
-            Xc, Yc = clip_datapoints(X, Y, CL, N_GPUS, CL_max)
+            Xc, Yc = X, [Y[0]]
             Yp = model.predict(Xc, batch_size=EVAL_BATCH_SIZE, verbose=0)
 
             if not isinstance(Yp, list):
@@ -379,7 +350,7 @@ def main():
         X = h5f['X' + str(idx)][:]
         Y = h5f['Y' + str(idx)][:]
 
-        Xc, Yc = clip_datapoints(X, Y, CL, N_GPUS, CL_max)
+        Xc, Yc = X, [Y[0]]
         model.fit(Xc, Yc, batch_size=BATCH_SIZE, verbose=0)
 
         if (batch_idx+1) % len(idx_train) == 0:
