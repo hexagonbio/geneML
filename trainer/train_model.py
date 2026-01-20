@@ -125,6 +125,30 @@ def main():
     from model import GeneML
     from utils import clip_datapoints, print_basic_statistics, print_topl_statistics
 
+
+    @keras.saving.register_keras_serializable()
+    class WarmupSchedule(tensorflow.keras.optimizers.schedules.LearningRateSchedule):
+        def __init__(self, start_lr, target_lr, warmup_steps):
+            self.start_lr = start_lr
+            self.target_lr = target_lr
+            self.warmup_steps = warmup_steps
+
+        def __call__(self, step):
+            step = tensorflow.cast(step, tensorflow.float32)
+            return tensorflow.cond(
+                step < self.warmup_steps,
+                lambda: self.start_lr + (self.target_lr - self.start_lr) * step / self.warmup_steps,
+                lambda: self.target_lr
+            )
+
+        def get_config(self):
+            return {
+                'start_lr': self.start_lr,
+                'target_lr': self.target_lr,
+                'warmup_steps': self.warmup_steps,
+            }
+
+
     args = get_args()
 
     os.makedirs('Models', exist_ok=True)
@@ -159,6 +183,7 @@ def main():
     BATCH_SIZE = None   # Number of sequences per training step
 
     LEARNING_RATE = None    # Final learning rate
+    WARMUP_EPOCHS = None    # Number of epochs for learning rate warmup
 
     if int(args.context_length) == 80:
         W = np.asarray([11, 11, 11, 11])
@@ -181,6 +206,7 @@ def main():
         AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
         BATCH_SIZE = 18*N_GPUS
         LEARNING_RATE = 0.0003
+        WARMUP_EPOCHS = 0.5
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21])
@@ -188,6 +214,7 @@ def main():
                          10, 10, 10, 10])
         BATCH_SIZE = 12*N_GPUS
         LEARNING_RATE = 0.0002
+        WARMUP_EPOCHS = 1
     elif int(args.context_length) == 10000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21, 41, 41, 41, 41])
@@ -224,6 +251,20 @@ def main():
         loss = categorical_crossentropy_2d_gene_ml
     else:
         assert False, 'failed: False'
+    h5f = h5py.File(args.train_path, 'r')
+
+    num_idx = len(h5f.keys())//2
+    tee('num_idx:', num_idx)
+    num_idx_train = int(0.9 * num_idx)
+
+    # Set learning rate schedule with warmup
+    steps_per_epoch = num_idx_train // BATCH_SIZE
+    warmup_steps = WARMUP_EPOCHS * steps_per_epoch
+    lr_schedule = WarmupSchedule(
+        start_lr=LEARNING_RATE * 0.01,
+        target_lr=LEARNING_RATE,
+        warmup_steps=warmup_steps,
+    )
 
     print("Num GPUs Available: ", len(tensorflow.config.list_physical_devices('GPU')))
 
@@ -242,21 +283,17 @@ def main():
         with strategy.scope():
             model = GeneML(L, W, AR, num_classes)
             model.compile(loss=loss,
-                          optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
+                          optimizer=keras.optimizers.Adam(learning_rate=lr_schedule))
     else:
         model = GeneML(L, W, AR, num_classes)
         model.compile(loss=loss,
-                      optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
+                      optimizer=keras.optimizers.Adam(learning_rate=lr_schedule))
     # model.summary()
 
     ###############################################################################
     # Training and validation
     ###############################################################################
 
-    h5f = h5py.File(args.train_path, 'r')
-
-    num_idx = len(h5f.keys())//2
-    tee('num_idx:', num_idx)
     idx_all = np.random.permutation(num_idx)
     idx_train = idx_all[:int(0.9*num_idx)]
     idx_valid = idx_all[int(0.9*num_idx):]
