@@ -164,42 +164,30 @@ def main():
     WARMUP_EPOCHS = None    # Number of epochs for learning rate warmup
     WEIGHT_DECAY = 0.0001   # Weight decay for Adam optimizer
 
-    if int(args.context_length) == 80:
-        W = np.asarray([11, 11, 11, 11])
-        AR = np.asarray([1, 1, 1, 1])
-        BATCH_SIZE = 18*N_GPUS
-    elif int(args.context_length) == 240:
-        W = np.asarray([11, 11, 11, 11, 11, 11])
-        AR = np.asarray([1, 1, 1, 1, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
-    elif int(args.context_length) == 400:
-        W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11])
-        AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4])
-        BATCH_SIZE = 18*N_GPUS
-    elif int(args.context_length) == 768:
-        W =  np.asarray([5,  5,  7,  11, 11, 11, 11, 11, 11, 11])
-        AR = np.asarray([1,  1,  1,  2,  2,  4,  4,  8,  16, 1])
-        BATCH_SIZE = 18*N_GPUS
-    elif int(args.context_length) == 800:
+
+    if int(args.context_length) == 800:
         W =  np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
         AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  10, 10])
-        BATCH_SIZE = 18*N_GPUS
+        BATCH_SIZE = 72*N_GPUS
         LEARNING_RATE = 0.0003
         WARMUP_EPOCHS = 0.5
+
+    elif int(args.context_length) == 1400:
+        W  = np.asarray([11, 11, 11, 11, 11, 11, 11, 11, 15, 15])
+        AR = np.asarray([1,  1,  1,  1,  4,  4,  4,  4,  8,  8])
+        BATCH_SIZE = 60*N_GPUS
+        LEARNING_RATE = 0.00025
+        WARMUP_EPOCHS = 0.75
+
     elif int(args.context_length) == 2000:
         W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
                         21, 21, 21, 21])
         AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                          10, 10, 10, 10])
-        BATCH_SIZE = 12*N_GPUS
+        BATCH_SIZE = 48*N_GPUS
         LEARNING_RATE = 0.0002
         WARMUP_EPOCHS = 1
-    elif int(args.context_length) == 10000:
-        W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
-                        21, 21, 21, 21, 41, 41, 41, 41])
-        AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
-                         10, 10, 10, 10, 25, 25, 25, 25])
-        BATCH_SIZE = 6*N_GPUS
+
     else:
         assert False, 'failed: int(args.context_length) does not match any known configuration'
 
