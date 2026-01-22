@@ -37,11 +37,18 @@ def get_args():
     parser.add_argument('--SL', type=int, required=True)
 
     parser.add_argument('--chunk-size', type=int, required=False, default=100)
-    parser.add_argument('--max-num-chunks', type=int, required=False)
+    parser.add_argument('--max-total-genes', type=int, required=False,
+                        help='Optional cap on total genes (after per-genome sampling and shuffling)')
     parser.add_argument('--outfile', type=str, required=False)
     parser.add_argument('--multigenome', required=False, action='store_true')
     parser.add_argument('--multigenome-glob', type=str, required=False, default='*')
     parser.add_argument('--multigenome-list', type=str, required=False)
+
+    parser.add_argument('--max-genes-per-genome', type=int, required=False,
+                        help='Cap the number of genes sampled from each genome before shuffling')
+
+    parser.add_argument('--seed', type=int, required=False, default=42,
+                        help='Deterministic seed for sampling/shuffling (default: 42)')
 
     parser.add_argument('--num-classes', type=int, choices=[3, 5, 7], required=False, default=7)
 
@@ -62,7 +69,33 @@ if args.multigenome:
         datafiles = sorted(glob.glob(os.path.join(args.data_dir, 'datafile' + '_' + args.mode + f'_{args.multigenome_glob}.h5')))
 else:
     datafiles = [os.path.join(args.data_dir, 'datafile' + '_' + args.mode + '_' + str(args.CL_max) + '_' + args.suffix + '.h5')]
+datafiles = sorted(datafiles)
 print('num datafiles:', len(datafiles))
+
+# Build a global shuffled list of (datafile, gene_idx) pairs across genomes
+CHUNK_SIZE = args.chunk_size
+all_genes = []
+rng = random.Random(args.seed)
+
+for datafile in datafiles:
+    with h5py.File(datafile, 'r') as h5f:
+        total_genes = h5f['SEQ'].shape[0]
+
+    max_from_this = args.max_genes_per_genome if args.max_genes_per_genome else total_genes
+    max_from_this = min(max_from_this, total_genes)
+
+    chosen_indices = rng.sample(range(total_genes), max_from_this) if max_from_this < total_genes else list(range(total_genes))
+    for idx in chosen_indices:
+        all_genes.append((datafile, idx))
+
+    print(datafile, 'total genes:', total_genes, 'selected:', len(chosen_indices))
+
+rng.shuffle(all_genes)
+
+if args.max_total_genes:
+    all_genes = all_genes[:args.max_total_genes]
+
+print('total selected genes (all genomes):', len(all_genes))
 
 if args.outfile:
     outfile = args.outfile
@@ -70,67 +103,49 @@ else:
     outfile = ('dataset' + '_' + args.mode + '_' + str(args.CL_max) + '_' + str(args.SL) + '_' + args.suffix + '.h5')
 h5f2 = h5py.File(os.path.join(args.data_dir, outfile), 'w')
 
-CHUNK_SIZE = args.chunk_size
+# Cache open H5 handles to avoid reopen cost per gene
+h5_cache = {}
+def get_handle(path):
+    if path not in h5_cache:
+        h5_cache[path] = h5py.File(path, 'r')
+    return h5_cache[path]
+
 h5f2_offset = 0
-for datafile in datafiles:
+num_chunks_total = int(np.ceil(len(all_genes) / float(CHUNK_SIZE))) if len(all_genes) else 0
 
-    h5f = h5py.File(datafile, 'r')
-    SEQ = h5f['SEQ'][:]
-    STRAND = h5f['STRAND'][:]
-    CDS_START = h5f['CDS_START'][:]
-    CDS_END = h5f['CDS_END'][:]
-    JN_START = h5f['JN_START'][:]
-    JN_END = h5f['JN_END'][:]
-    SEQ_START = h5f['SEQ_START'][:]
-    h5f.close()
+for chunk_idx in range(num_chunks_total):
+    start = chunk_idx * CHUNK_SIZE
+    end = min(start + CHUNK_SIZE, len(all_genes))
+    chunk_genes = all_genes[start:end]
 
-    total_chunks = SEQ.shape[0]//CHUNK_SIZE
-    if args.max_num_chunks:
-        num_chunks = min(total_chunks, args.max_num_chunks)
-        chunk_choices = random.sample(list(range(total_chunks)), num_chunks)
-    else:
-        num_chunks = total_chunks
-        chunk_choices = list(range(num_chunks))
+    X_batch = []
+    Y_batch = [[] for t in range(1)]
 
-    print(datafile, 'total num_chunks:', total_chunks, 'num_chunks:', num_chunks)
+    for datafile, gene_idx in chunk_genes:
+        h5f = get_handle(datafile)
+        X, Y = create_datapoints(
+            h5f['SEQ'][gene_idx], h5f['STRAND'][gene_idx],
+            h5f['CDS_START'][gene_idx], h5f['CDS_END'][gene_idx],
+            h5f['JN_START'][gene_idx], h5f['JN_END'][gene_idx],
+            h5f['SEQ_START'][gene_idx],
+            SL=args.SL, CL_max=args.CL_max,
+        )
 
-    for offset, i in enumerate(chunk_choices):
-        # Each dataset has CHUNK_SIZE genes
-
-        if (i+1) == SEQ.shape[0]//CHUNK_SIZE:
-            NEW_CHUNK_SIZE = CHUNK_SIZE + SEQ.shape[0] % CHUNK_SIZE
-        else:
-            NEW_CHUNK_SIZE = CHUNK_SIZE
-
-        X_batch = []
-        Y_batch = [[] for t in range(1)]
-
-        for j in range(NEW_CHUNK_SIZE):
-
-            idx = i*CHUNK_SIZE + j
-
-            X, Y = create_datapoints(
-                SEQ[idx], STRAND[idx],
-                CDS_START[idx], CDS_END[idx],
-                JN_START[idx], JN_END[idx],
-                SEQ_START[idx],
-                SL=args.SL, CL_max=args.CL_max,
-            )
-
-            X_batch.extend(X)
-            for t in range(1):
-                Y_batch[t].extend(Y[t])
-
-        X_batch = np.asarray(X_batch).astype('int8')
+        X_batch.extend(X)
         for t in range(1):
-            Y_batch[t] = np.asarray(Y_batch[t]).astype('float32')
+            Y_batch[t].extend(Y[t])
 
-        # h5f2.create_dataset('X' + str(i), data=X_batch)
-        # h5f2.create_dataset('Y' + str(i), data=Y_batch)
-        h5f2.create_dataset('X' + str(h5f2_offset+offset), data=X_batch)
-        h5f2.create_dataset('Y' + str(h5f2_offset+offset), data=Y_batch)
+    X_batch = np.asarray(X_batch).astype('int8')
+    for t in range(1):
+        Y_batch[t] = np.asarray(Y_batch[t]).astype('float32')
 
-    h5f2_offset += num_chunks
+    h5f2.create_dataset('X' + str(h5f2_offset), data=X_batch)
+    h5f2.create_dataset('Y' + str(h5f2_offset), data=Y_batch)
+    h5f2_offset += 1
+
+# Close cached handles
+for h in h5_cache.values():
+    h.close()
 
 h5f2.close()
 
