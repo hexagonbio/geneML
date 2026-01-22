@@ -261,8 +261,6 @@ def main():
     idx_train = idx_all[:int(0.9*num_idx)]
     idx_valid = idx_all[int(0.9*num_idx):]
 
-    num_batches = args.num_epochs*len(idx_train)
-
     # Use a fixed validation subset across all epochs for stable metrics
     eval_count = min(len(idx_valid), args.max_eval_samples)
     val_eval_indices = idx_valid[:eval_count]
@@ -334,80 +332,81 @@ def main():
 
         return acceptor_score, donor_score
 
-    for batch_idx in range(num_batches):
+    for epoch_num in range(1, args.num_epochs + 1):
+        # Shuffle indices for this epoch (no replacement)
+        # Use epoch-based seed for deterministic but different permutation per epoch
+        np.random.seed(SEED + epoch_num)
+        epoch_indices = np.random.permutation(idx_train)
 
-        idx = np.random.choice(idx_train)
+        for idx in epoch_indices:
+            X = h5f['X' + str(idx)][:]
+            Y = h5f['Y' + str(idx)][:]
 
-        X = h5f['X' + str(idx)][:]
-        Y = h5f['Y' + str(idx)][:]
+            Xc, Yc = X, [Y[0]]
+            model.fit(Xc, Yc, batch_size=BATCH_SIZE, verbose=0)
 
-        Xc, Yc = X, [Y[0]]
-        model.fit(Xc, Yc, batch_size=BATCH_SIZE, verbose=0)
+        is_first_epoch = (epoch_num == 1)
+        is_last_epoch = (epoch_num == args.num_epochs)
+        should_eval = is_first_epoch or is_last_epoch or ((epoch_num - 1) % args.eval_every == 0)
+        tee("--------------------------------------------------------------")
+        tee("epoch_num:", epoch_num)
 
-        if (batch_idx+1) % len(idx_train) == 0:
-            epoch_num = (batch_idx+1) // len(idx_train)
-            is_first_epoch = (epoch_num == 1)
-            is_last_epoch = (epoch_num == args.num_epochs)
-            should_eval = is_first_epoch or is_last_epoch or ((epoch_num - 1) % args.eval_every == 0)
-            tee("--------------------------------------------------------------")
-            tee("epoch_num:", epoch_num)
+        if should_eval:
+            # Printing metrics (see utils.py for details)
+            tee("\n\033[1mValidation set metrics:\033[0m")
+            acceptor_score, donor_score = print_performance_metrics(val_eval_indices, len(val_eval_indices))
 
-            if should_eval:
-                # Printing metrics (see utils.py for details)
-                tee("\n\033[1mValidation set metrics:\033[0m")
-                acceptor_score, donor_score = print_performance_metrics(val_eval_indices, len(val_eval_indices))
+            tee("\n\033[1mTraining set metrics:\033[0m")
+            print_performance_metrics(train_eval_indices, len(train_eval_indices))
 
-                tee("\n\033[1mTraining set metrics:\033[0m")
-                print_performance_metrics(train_eval_indices, len(train_eval_indices))
-
-                # Early stopping check based on average of acceptor and donor Top-1L
-                current_val_score = (acceptor_score + donor_score) / 2.0
-                if current_val_score > best_val_score + args.early_stopping_min_delta:
-                    best_val_score = current_val_score
-                    best_epoch = epoch_num
-                    patience_counter = 0
-                    tee(f"\033[92m*** New best validation score: {best_val_score:.4f} (epoch {best_epoch}) ***\033[0m")
-                else:
-                    patience_counter += 1
-                    tee(f"No improvement for {patience_counter} evaluation(s). Best: {best_val_score:.4f} (epoch {best_epoch})")
-
-                from tensorflow.python.keras import backend
-                K = backend
-                tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
-                tee("--- %s seconds ---" % (time.time() - start_time))
-                start_time = time.time()
-
-                tee("--------------------------------------------------------------")
-                sys.stdout.flush()
-
-                filename = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + f'_ep{epoch_num}.h5')
-                tee.f.flush()
-
-                os.makedirs(args.keras_save_path, exist_ok=True)
-                local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
-                model.save(local_path_keras)
-
-                # Clear memory after metrics printing
-                gc.collect()
-                tensorflow.keras.backend.clear_session()
-
-                if acceptor_score < 0.1 and donor_score < 0.1:
-                    tee('Weak training--exiting early')
-                    sys.exit(0)
-
-                # Early stopping: halt if patience exceeded
-                if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
-                    tee(f"\n\033[93mEarly stopping triggered after {patience_counter} evaluations without improvement.\033[0m")
-                    tee(f"\033[92mBest epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
-                    tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
-                    h5f.close()
-                    sys.exit(0)
+            # Early stopping check based on average of acceptor and donor Top-1L
+            current_val_score = (acceptor_score + donor_score) / 2.0
+            if current_val_score > best_val_score + args.early_stopping_min_delta:
+                best_val_score = current_val_score
+                best_epoch = epoch_num
+                patience_counter = 0
+                tee(f"\033[92m*** New best validation score: {best_val_score:.4f} (epoch {best_epoch}) ***\033[0m")
             else:
-                tee(f"Skipping evaluation this epoch (eval_every={args.eval_every})")
-                tee("--- %s seconds ---" % (time.time() - start_time))
-                start_time = time.time()
-                tee("--------------------------------------------------------------")
-                sys.stdout.flush()
+                patience_counter += 1
+                tee(f"No improvement for {patience_counter} evaluation(s). Best: {best_val_score:.4f} (epoch {best_epoch})")
+
+            from tensorflow.python.keras import backend
+            K = backend
+            tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
+            tee("--- %s seconds ---" % (time.time() - start_time))
+            start_time = time.time()
+
+            tee("--------------------------------------------------------------")
+            sys.stdout.flush()
+
+            filename = ('GeneML' + str(args.context_length) + '_c' + args.dataset_name + f'_ep{epoch_num}.h5')
+            tee.f.flush()
+
+            os.makedirs(args.keras_save_path, exist_ok=True)
+            local_path_keras = os.path.join(args.keras_save_path, filename.replace('.h5', '.keras'))
+            model.save(local_path_keras)
+
+            # Clear memory after metrics printing
+            gc.collect()
+            tensorflow.keras.backend.clear_session()
+
+            if acceptor_score < 0.1 and donor_score < 0.1:
+                tee('Weak training--exiting early')
+                sys.exit(0)
+
+            # Early stopping: halt if patience exceeded
+            if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
+                tee(f"\n\033[93mEarly stopping triggered after {patience_counter} evaluations without improvement.\033[0m")
+                tee(f"\033[92mBest epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
+                tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
+                h5f.close()
+                sys.exit(0)
+        else:
+            tee(f"Skipping evaluation this epoch (eval_every={args.eval_every})")
+            tee("--- %s seconds ---" % (time.time() - start_time))
+            start_time = time.time()
+            tee("--------------------------------------------------------------")
+            sys.stdout.flush()
 
     # Training completed without early stopping
     if args.early_stopping_patience > 0:
