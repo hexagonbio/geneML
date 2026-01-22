@@ -79,6 +79,12 @@ def get_args():
         default=0.0005,
         help='Minimum improvement in validation metric to reset patience (default: %(default)s)',
     )
+    parser.add_argument(
+        '--chunks-per-batch',
+        type=int,
+        default=1,
+        help='How many dataset chunks to pool, shuffle, and train on in a single fit call (default: 1)'
+    )
     args, _ = parser.parse_known_args()
     return args
 
@@ -338,12 +344,33 @@ def main():
         np.random.seed(SEED + epoch_num)
         epoch_indices = np.random.permutation(idx_train)
 
-        for idx in epoch_indices:
-            X = h5f['X' + str(idx)][:]
-            Y = h5f['Y' + str(idx)][:]
+        # Process chunks in pooled groups to shuffle windows across multiple chunks
+        for start in range(0, len(epoch_indices), args.chunks_per_batch):
+            batch_chunk_idxs = epoch_indices[start:start + args.chunks_per_batch]
 
-            Xc, Yc = X, [Y[0]]
-            model.fit(Xc, Yc, batch_size=BATCH_SIZE, verbose=0)
+            X_pool = []
+            Y_pool = []
+
+            for idx in batch_chunk_idxs:
+                X = h5f['X' + str(idx)][:]
+                Y = h5f['Y' + str(idx)][:]
+
+                Xc, Yc = X, [Y[0]]
+                X_pool.append(Xc)
+                Y_pool.append(Yc[0])  # only one target tensor
+
+            if not X_pool:
+                continue
+
+            X_pool = np.concatenate(X_pool, axis=0)
+            Y_pool = np.concatenate(Y_pool, axis=0)
+
+            # Shuffle windows across pooled chunks
+            perm = np.random.permutation(X_pool.shape[0])
+            X_pool = X_pool[perm]
+            Y_pool = Y_pool[perm]
+
+            model.fit(X_pool, [Y_pool], batch_size=BATCH_SIZE, shuffle=False, verbose=0)
 
         is_first_epoch = (epoch_num == 1)
         is_last_epoch = (epoch_num == args.num_epochs)
