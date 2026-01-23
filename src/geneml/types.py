@@ -92,6 +92,7 @@ class Gene:
     end: int
     strand: int
     transcripts: tuple[Transcript, ...]
+    score: float
 
     def __post_init__(self):
         if not self.transcripts:
