@@ -355,6 +355,7 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
                 end=max(t.end for t in group),
                 strand=group[0].strand,
                 transcripts=tuple(group),
+                score=max(t.score for t in group),
             )
             genes_by_contig[contig_id].append(gene)
 

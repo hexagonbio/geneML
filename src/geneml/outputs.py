@@ -34,7 +34,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
         "gene",
         get_start_coordinate(gene.start),
         get_end_coordinate(gene.end),
-        ".",
+        f"{gene.score:.3f}",
         strand,
         ".",
         f"ID={gene_id}",
