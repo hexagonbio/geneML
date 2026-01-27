@@ -237,15 +237,16 @@ def main():
     elif args.model_type == 'gene_ml':
         @keras.saving.register_keras_serializable()
         def categorical_crossentropy_2d_gene_ml(y_true, y_pred):
-            # Standard categorical cross entropy for sequence outputs
             kb = keras.ops
-            return - kb.mean(y_true[:, :, 0] * kb.log(y_pred[:, :, 0] + 1e-10)
-                             + y_true[:, :, 1] * kb.log(y_pred[:, :, 1] + 1e-10)
-                             + y_true[:, :, 2] * kb.log(y_pred[:, :, 2] + 1e-10)
-                             + y_true[:, :, 3] * kb.log(y_pred[:, :, 3] + 1e-10)
-                             + y_true[:, :, 4] * kb.log(y_pred[:, :, 4] + 1e-10)
-                             + y_true[:, :, 5] * kb.log(y_pred[:, :, 5] + 1e-10)
-                             + y_true[:, :, 6] * kb.log(y_pred[:, :, 6] + 1e-10))
+
+            # Mask for non-padding positions (sum over classes > 0)
+            mask = kb.sum(y_true, axis=-1) > 0
+            mask = kb.cast(mask, y_pred.dtype)
+
+            loss_per_pos = -kb.sum(y_true * kb.log(y_pred + 1e-10), axis=-1)
+            masked_loss = loss_per_pos * mask
+            loss = kb.sum(masked_loss) / (kb.sum(mask) + 1e-8)
+            return loss
 
         num_classes = 7
         loss = categorical_crossentropy_2d_gene_ml
