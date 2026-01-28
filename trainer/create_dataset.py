@@ -9,6 +9,7 @@ import glob
 import os
 import random
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import h5py
 import numpy as np
@@ -51,6 +52,9 @@ def get_args():
                         help='Deterministic seed for sampling/shuffling (default: 42)')
 
     parser.add_argument('--num-classes', type=int, choices=[3, 5, 7], required=False, default=7)
+
+    parser.add_argument('--num-threads', type=int, required=False, default=8,
+                        help='Number of threads for parallel processing (default: 8)')
 
     args, _ = parser.parse_known_args()
     return args
@@ -103,20 +107,15 @@ else:
     outfile = ('dataset' + '_' + args.mode + '_' + str(args.CL_max) + '_' + str(args.SL) + '_' + args.suffix + '.h5')
 h5f2 = h5py.File(os.path.join(args.data_dir, outfile), 'w')
 
-# Cache open H5 handles to avoid reopen cost per gene
-h5_cache = {}
-def get_handle(path):
-    if path not in h5_cache:
-        h5_cache[path] = h5py.File(path, 'r')
-    return h5_cache[path]
+def process_chunk(chunk_idx, chunk_genes, SL, CL_max):
+    """Process a chunk of genes in parallel."""
+    # Each thread needs its own H5 file handles
+    h5_cache = {}
 
-h5f2_offset = 0
-num_chunks_total = int(np.ceil(len(all_genes) / float(CHUNK_SIZE))) if len(all_genes) else 0
-
-for chunk_idx in range(num_chunks_total):
-    start = chunk_idx * CHUNK_SIZE
-    end = min(start + CHUNK_SIZE, len(all_genes))
-    chunk_genes = all_genes[start:end]
+    def get_handle(path):
+        if path not in h5_cache:
+            h5_cache[path] = h5py.File(path, 'r')
+        return h5_cache[path]
 
     X_batch = []
     Y_batch = [[] for t in range(1)]
@@ -128,24 +127,60 @@ for chunk_idx in range(num_chunks_total):
             h5f['CDS_START'][gene_idx], h5f['CDS_END'][gene_idx],
             h5f['JN_START'][gene_idx], h5f['JN_END'][gene_idx],
             h5f['SEQ_START'][gene_idx],
-            SL=args.SL, CL_max=args.CL_max,
+            SL=SL, CL_max=CL_max,
         )
 
         X_batch.extend(X)
         for t in range(1):
             Y_batch[t].extend(Y[t])
 
+    # Close handles for this thread
+    for h in h5_cache.values():
+        h.close()
+
+    # Convert to numpy arrays
     X_batch = np.asarray(X_batch).astype('int8')
     for t in range(1):
         Y_batch[t] = np.asarray(Y_batch[t]).astype('float32')
 
-    h5f2.create_dataset('X' + str(h5f2_offset), data=X_batch)
-    h5f2.create_dataset('Y' + str(h5f2_offset), data=Y_batch)
-    h5f2_offset += 1
+    return chunk_idx, X_batch, Y_batch
 
-# Close cached handles
-for h in h5_cache.values():
-    h.close()
+h5f2_offset = 0
+num_chunks_total = int(np.ceil(len(all_genes) / float(CHUNK_SIZE))) if len(all_genes) else 0
+
+print(f'Processing {num_chunks_total} chunks with {args.num_threads} processes...')
+
+# Process chunks in batches to limit memory usage
+batch_size = args.num_threads * 2  # Process 2x num_threads at a time
+with ProcessPoolExecutor(max_workers=args.num_threads) as executor:
+    for batch_start in range(0, num_chunks_total, batch_size):
+        batch_end = min(batch_start + batch_size, num_chunks_total)
+
+        # Submit batch of jobs
+        futures = {}
+        for chunk_idx in range(batch_start, batch_end):
+            start = chunk_idx * CHUNK_SIZE
+            end = min(start + CHUNK_SIZE, len(all_genes))
+            chunk_genes = all_genes[start:end]
+
+            future = executor.submit(process_chunk, chunk_idx, chunk_genes, args.SL, args.CL_max)
+            futures[future] = chunk_idx
+
+        # Collect results for this batch
+        results = {}
+        for future in as_completed(futures):
+            chunk_idx, X_batch, Y_batch = future.result()
+            results[chunk_idx] = (X_batch, Y_batch)
+
+        # Write results in order
+        for chunk_idx in range(batch_start, batch_end):
+            X_batch, Y_batch = results[chunk_idx]
+            h5f2.create_dataset('X' + str(h5f2_offset), data=X_batch)
+            h5f2.create_dataset('Y' + str(h5f2_offset), data=Y_batch)
+            h5f2_offset += 1
+
+        if batch_end % 100 == 0 or batch_end == num_chunks_total:
+            print(f'Completed {batch_end}/{num_chunks_total} chunks')
 
 h5f2.close()
 
