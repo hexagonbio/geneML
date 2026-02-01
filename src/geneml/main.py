@@ -250,7 +250,7 @@ def parse_args(argv=None):
     advanced.add_argument('--allow-opposite-strand-overlaps', choices=['true', 'false'], default='true', help="Predict overlapping genes on opposite strands (default: %(default)s).")
     advanced.add_argument('--min-gene-score', type=str, default='dynamic', help="Minimum gene score for gene reporting. Can be a float value or 'dynamic' (default: %(default)s). Dynamic mode requires >=100,000 bp total input.")
     advanced.add_argument('--min-exon-size', type=int, default=1, help="Minimum exon size (default: %(default)s).")
-    advanced.add_argument('--max-exon-size', type=int, default=10000, help="Maximum exon size (default: %(default)s).")
+    advanced.add_argument('--max-exon-size', type=int, default=30000, help="Maximum exon size (default: %(default)s).")
     advanced.add_argument('--min-intron-size', type=int, default=10, help="Minimum intron size (default: %(default)s).")
     advanced.add_argument('--max-intron-size', type=int, default=400, help="Maximum intron size (default: %(default)s).")
     advanced.add_argument('--cds-start-min-score', type=float, default=0.01, help="Minimum model score for considering a CDS start (default: %(default)s).")
