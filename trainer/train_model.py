@@ -80,6 +80,12 @@ def get_args():
         help='Minimum improvement in validation metric to reset patience (default: %(default)s)',
     )
     parser.add_argument(
+        '--learning-rate-decay',
+        type=float,
+        default=1/3,
+        help='Factor to decay learning rate by on plateau (default: %(default)s)',
+    )
+    parser.add_argument(
         '--chunks-per-batch',
         type=int,
         default=1,
@@ -132,6 +138,33 @@ def main():
                 'target_lr': self.target_lr,
                 'warmup_steps': self.warmup_steps,
             }
+
+
+    @keras.saving.register_keras_serializable()
+    class DecayOnPlateauSchedule(tensorflow.keras.optimizers.schedules.LearningRateSchedule):
+        def __init__(self, base_schedule, decay_factor):
+            self.base_schedule = base_schedule
+            self.decay_factor = decay_factor
+
+        def __call__(self, step):
+            return self.base_schedule(step) * self.decay_factor
+
+        def get_config(self):
+            return {
+                'base_schedule': keras.saving.serialize_keras_object(self.base_schedule),
+                'decay_factor': float(tensorflow.keras.backend.get_value(self.decay_factor)),
+            }
+
+        @classmethod
+        def from_config(cls, config):
+            base_schedule = keras.saving.deserialize_keras_object(config['base_schedule'])
+            decay_factor = tensorflow.Variable(
+                config['decay_factor'],
+                trainable=False,
+                dtype=tensorflow.float32,
+                name='lr_decay_factor',
+            )
+            return cls(base_schedule, decay_factor)
 
 
     args = get_args()
@@ -227,11 +260,13 @@ def main():
     # Set learning rate schedule with warmup
     steps_per_epoch = num_idx_train // BATCH_SIZE
     warmup_steps = WARMUP_EPOCHS * steps_per_epoch
-    lr_schedule = WarmupSchedule(
+    base_lr_schedule = WarmupSchedule(
         start_lr=LEARNING_RATE * 0.01,
         target_lr=LEARNING_RATE,
         warmup_steps=warmup_steps,
     )
+    decay_factor = tensorflow.Variable(1.0, trainable=False, dtype=tensorflow.float32, name='lr_decay_factor')
+    lr_schedule = DecayOnPlateauSchedule(base_lr_schedule, decay_factor)
 
     print("Num GPUs Available: ", len(tensorflow.config.list_physical_devices('GPU')))
 
@@ -279,6 +314,7 @@ def main():
     best_val_score = -1.0
     best_epoch = 0
     patience_counter = 0
+    decay_counter = 0
 
     # Evaluation batch size can be smaller than training to reduce peak GPU mem
     EVAL_BATCH_SIZE = max(1, min(BATCH_SIZE, args.eval_batch_size * N_GPUS))
@@ -397,9 +433,15 @@ def main():
                 patience_counter += 1
                 tee(f"No improvement for {patience_counter} evaluation(s). Best: {best_val_score:.4f} (epoch {best_epoch})")
 
-            from tensorflow.python.keras import backend
-            K = backend
-            tee("Learning rate: %.5f" % (K.get_value(model.optimizer.learning_rate)))
+            def get_current_lr():
+                lr_obj = model.optimizer.learning_rate
+                if hasattr(lr_obj, "__call__") and not hasattr(lr_obj, "dtype"):
+                    lr_val = lr_obj(model.optimizer.iterations)
+                else:
+                    lr_val = lr_obj
+                return float(tensorflow.keras.backend.get_value(lr_val))
+
+            tee("Learning rate: %.5f" % (get_current_lr()))
             tee("--- %s seconds ---" % (time.time() - start_time))
             start_time = time.time()
 
@@ -423,11 +465,20 @@ def main():
 
             # Early stopping: halt if patience exceeded
             if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
-                tee(f"\n\033[93mEarly stopping triggered after {patience_counter} evaluations without improvement.\033[0m")
-                tee(f"\033[92mBest epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
-                tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
-                h5f.close()
-                sys.exit(0)
+                # allow learning rate to decay up to 2 times before stopping
+                if decay_counter < 2:
+                    old_lr = get_current_lr()
+                    decay_factor.assign(decay_factor * args.learning_rate_decay)
+                    new_lr = old_lr * args.learning_rate_decay
+                    tee(f"\n\033[93mLearning rate decayed from {old_lr:.5f} to {new_lr:.5f} after {patience_counter} evaluations without improvement.\033[0m")
+                    patience_counter = 0
+                    decay_counter += 1
+                else:
+                    tee(f"\n\033[93mEarly stopping triggered after {patience_counter} evaluations without improvement.\033[0m")
+                    tee(f"\033[92mBest epoch: {best_epoch} with validation score: {best_val_score:.4f}\033[0m")
+                    tee(f"\033[92mRecommended checkpoint: GeneML{args.context_length}_c{args.dataset_name}_ep{best_epoch}.keras\033[0m")
+                    h5f.close()
+                    sys.exit(0)
         else:
             tee(f"Skipping evaluation this epoch (eval_every={args.eval_every})")
             tee("--- %s seconds ---" % (time.time() - start_time))
