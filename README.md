@@ -4,20 +4,25 @@ geneML is a deep learning–based tool for fungal gene prediction.
 ## Installation
 The only requirement is python v3.9 or higher.
 
+### Using virtualenv
 Start with a fresh python virtual environment:
 ```bash
 python -m venv geneml
 . geneml/bin/activate
-```
-Or use a conda environment:
-```bash
-conda create -n geneml
-conda activate geneml
-```
-Now install the latest release from TestPyPI:
-```bash
+# Now install the latest release from TestPyPI:
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geneml
 ```
+
+### Using conda
+Or use a conda environment:
+```bash
+conda create -n geneml -c conda-forge python=3.13 pip
+conda activate geneml
+# Now install the latest release from TestPyPI:
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geneml
+```
+
+### Directly from the repo
 Or install directly from this repo (to get access to the latest changes):
 ```bash
 git clone https://github.com/hexagonbio/geneML.git
