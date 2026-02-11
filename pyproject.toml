@@ -20,9 +20,7 @@ dependencies = [
     "numpy>=1.21.0",
     "psutil>=5.9.0",
     "silence_tensorflow>=0.2.0",
-    "tensorflow>=2.17.0;sys_platform != 'linux'",
-    # to avoid tensorflow warning messages: https://github.com/tensorflow/tensorflow/issues/54499#issuecomment-1050103601
-    "tensorflow-cpu>=2.17.0;sys_platform == 'linux'",
+    "tensorflow>=2.17.0",
     "tqdm>=4.62.0",
 ]
 license = "GPL-3.0-only"
