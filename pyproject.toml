@@ -3,8 +3,8 @@ name = "geneml"
 description = "Gene Annotation Across Diverse Fungal Species Using Deep Learning"
 readme = "README.md"
 authors = [
-    { name = "Lawrence Hon", email = "lhon@hexagonbio.com" },
-    { name = "Lisa Vader", email = "lisvad@biosustain.dtu.dk" }
+    { name = "Lawrence Hon", email = "hon@cs.stanford.edu" },
+    { name = "Lisa Vader", email = "lisa@mmvinder.nl" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
