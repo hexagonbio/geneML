@@ -387,6 +387,124 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent]) -> float:
 
 
 @njit
+def diff_gene_events(call1: list[GeneEvent], call2: list[GeneEvent]
+                     ) -> tuple[list[GeneEvent], list[GeneEvent]]:
+    """Compute differences between two gene calls by comparing events.
+
+    Performs a pairwise comparison of two sorted lists of gene events to identify
+    which events were added (present in call2 but not call1) and which were removed
+    (present in call1 but not call2). Events are compared by position and type.
+
+    Args:
+        call1: First gene call as a list of GeneEvents, sorted by position and type
+        call2: Second gene call as a list of GeneEvents, sorted by position and type
+
+    Returns:
+        Tuple of (added_events, removed_events) where each is a list of GeneEvents
+    """
+    added_events = typed.List.empty_list(GeneEventNumbaType)
+    removed_events = typed.List.empty_list(GeneEventNumbaType)
+
+    i = 0
+    j = 0
+    while i < len(call1) and j < len(call2):
+        e1 = call1[i]
+        e2 = call2[j]
+        if e1.pos == e2.pos and e1.type == e2.type:
+            i += 1
+            j += 1
+        elif (e1.pos < e2.pos) or (e1.pos == e2.pos and e1.type < e2.type):
+            removed_events.append(e1)
+            i += 1
+        else:
+            added_events.append(e2)
+            j += 1
+
+    while i < len(call1):
+        removed_events.append(call1[i])
+        i += 1
+    while j < len(call2):
+        added_events.append(call2[j])
+        j += 1
+
+    return added_events, removed_events
+
+
+@njit
+def count_relevant_removed(removed_events: list[GeneEvent], call: list[GeneEvent]) -> int:
+    """Count the number of removed events relevant for evaluating alternative starts/ends.
+
+    Adjusts the count of removed events by excluding events that represent introns
+    (EXON_END + EXON_START pairs) that occur outside or cross the call boundaries.
+
+    Args:
+        removed_events: List of GeneEvents that were removed in the comparison
+        call: The gene call to evaluate against, defines the relevant region
+
+    Returns:
+        Integer count of relevant removed events
+    """
+    count = len(removed_events)
+    for event in removed_events:
+        # If within bounds, continue
+        if call[0].pos <= event.pos <= call[-1].pos:
+            continue
+        # Skip events for introns outside or crossing the call boundary
+        if event.type == EXON_END:
+            count -= 2
+    assert count > 0, f'Count needs to be positive, got {count}'
+    return count
+
+
+@njit
+def is_valid_alternative(call1: list[GeneEvent], call2: list[GeneEvent]) -> bool:
+    """Determine if call2 is a valid alternative isoform of call1.
+
+    Evaluates whether a second gene call represents a biologically plausible alternative
+    transcript of a reference gene call.
+    The gene call is considered valid if either of the following conditions are met:
+    1. Added events have substantially better scores than removed events
+    2. There is a single added event with a high absolute score and a single relevant removed event
+       This catches alternative start/end sites and alternative splice sites
+       with a low relative score but high absolute score
+
+    Args:
+        call1: Reference gene call structure as list of GeneEvents
+        call2: Candidate alternative gene call to evaluate as list of GeneEvents
+
+    Returns:
+        Boolean indicating whether call2 is a valid alternative to call1
+    """
+    added_events, removed_events = diff_gene_events(call1, call2)
+
+    added_score = 0.0
+    removed_score = 0.0
+
+    for event in added_events:
+        if event.score < 0.05:
+            return False  # If any added event has very low score, reject as alternative
+        added_score += event.score
+    for event in removed_events:
+        removed_score += event.score
+
+    num_added = len(added_events)
+
+    score_diff = added_score - removed_score
+
+    # If what's added scores considerably better than what's removed, consider valid
+    if score_diff >= 0.2:
+        return True
+
+    # If there is only a single event difference, and its absolute score is decent, consider valid
+    # This is to catch alternative boundary sites that are valid even though they score lower than
+    # the canonical site
+    if added_score >= 0.2 and num_added == 1 and count_relevant_removed(removed_events, call2) == 1:
+        return True
+
+    return False
+
+
+@njit
 def compute_cds_length(gene_call: list[GeneEvent]) -> int:
     """Calculate the total coding sequence (CDS) length from a gene call.
 
@@ -422,50 +540,60 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]],
     """Select best gene calls from a group of overlapping candidates.
 
     Filters a group of overlapping gene candidates to retain the most promising
-    isoforms based on quality score and CDS length. Prioritizes keeping the longest
-    gene among high-scoring candidates, plus additional high-scoring alternatives
-    that are similar in length.
+    isoforms based on quality score and start position. Prioritizes keeping the longest
+    gene among high-scoring candidates, plus alternatives with similar or better event scores.
+    The first candidate returned is considered the primary isoform.
 
     Selection strategy:
     1. Identify best-scoring candidates (within a score threshold of top score)
-    2. Keep the longest among those candidates
-    3. Add top scorers that meet a minimum length requirement relative to the longest
+    2. Among best scorers, select the highest-scoring candidate with the lowest start position
+    3. Collect valid alternatives to the initial candidate, up to min(5, max_transcripts) total
+    4. Sort collected candidates by CDS length
+    5. Return up to max_transcripts candidates
 
     Args:
         group: List of (score, gene_call) tuples for overlapping gene candidates
         max_transcripts: Maximum number of alternative transcripts to retain
 
     Returns:
-        List of (score, gene_call) tuples for selected gene calls
+        List of (score, gene_call) tuples for selected gene calls, sorted by CDS length
     """
+    initial_max_transcripts = min(5, max_transcripts)
+
     group.sort(key=lambda x: x[0], reverse=True) # sort by score
     best_score = group[0][0]
     best_candidates = [item for item in group if best_score - item[0] <= 0.2]
 
-    # Keep longest candidate among best candidates
-    lengths = np.array([compute_cds_length(call) for _, call in best_candidates])
-    longest_i = np.argmax(lengths)
-    longest = best_candidates[longest_i]
-    keep = [longest]
+    # Find candidate with lowest start position (highest score if tied on position)
+    top_idx = 0
+    for i in range(1, len(best_candidates)):
+        if best_candidates[i][1][0].pos < best_candidates[top_idx][1][0].pos:
+            top_idx = i
+        elif best_candidates[i][1][0].pos == best_candidates[top_idx][1][0].pos \
+             and best_candidates[i][0] > best_candidates[top_idx][0]:
+            top_idx = i
 
-    # Also keep top-scoring genes within 0.01 of best score
-    # But only if they're at least 70% as long as the longest
-    if max_transcripts > 1:
-        longest_length = lengths[longest_i]
-        min_length = longest_length * 0.7
-        length_filtered = [item for item in group
-                            if compute_cds_length(item[1]) >= min_length]
+    keep = [best_candidates[top_idx]]
 
-        # From length-filtered candidates, get top scorers within 0.01 of each other
-        if length_filtered:
-            top_score = length_filtered[0][0]
-            top_scorers = [item for item in length_filtered
-                            if top_score - item[0] <= 0.01
-                            and item != longest]
-            num_added_transcripts = min(len(top_scorers), max_transcripts - 1)
-            keep.extend(top_scorers[:num_added_transcripts])
+    # Also keep alternatives with similar or higher event scores
+    for i, candidate in enumerate(best_candidates):
+        if i == top_idx:
+            continue
+        # Compare to all selected candidates
+        valid = True
+        for ref in keep:
+            if not is_valid_alternative(ref[1], candidate[1]):
+                valid = False
+                break
+        if valid:
+            keep.append(candidate)
+        if len(keep) == initial_max_transcripts:
+            break
 
-    return keep
+    keep.sort(key=lambda x: compute_cds_length(x[1]), reverse=True) # sort by CDS length
+    selected = keep[:max_transcripts] # enforce max_transcripts limit
+
+    return selected
 
 
 @njit
@@ -476,13 +604,8 @@ def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
 
     Filters candidate gene calls based on minimum score.
     Groups overlapping gene calls and selects the most promising candidates from each
-    group based on a combination of score and CDS length. Designed to retain both
-    the longest isoform and high-scoring alternative transcripts.
-
-    For each group of overlapping gene candidates:
-        1. Sorts by score (descending)
-        2. Identifies the call with longest CDS
-        3. Keeps the longest plus top-scoring alternatives (up to max_transcripts total)
+    group based on a combination of score and start position. Designed to retain both
+    the longest isoform and valid alternative transcripts.
 
     Args:
         preds: Model predictions array with shape (num_features, sequence_length)
