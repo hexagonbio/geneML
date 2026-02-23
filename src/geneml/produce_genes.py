@@ -93,8 +93,10 @@ def filter_overlapping_transcripts(transcripts: list[Transcript]) -> list[Transc
     if not transcripts:
         return []
 
-    non_overlapping = [transcripts[0]]
-    for t in transcripts[1:]:
+    sorted_transcripts = sorted(transcripts, key=lambda x: (x.start, x.end))
+
+    non_overlapping = [sorted_transcripts[0]]
+    for t in sorted_transcripts[1:]:
         if (t.strand != non_overlapping[-1].strand and
             non_overlapping[-1].overlaps_with(t, ignore_strand=True) and
             t.score > non_overlapping[-1].score):
@@ -134,8 +136,6 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
             transcripts.extend(create_transcripts(rc_scored_gene_calls, rc_preds, seq_length, is_rc=True))
 
     logger.info('%s 5/5: Selecting best gene calls', contig_id)
-
-    transcripts.sort(key=lambda x: (x.start, x.end))
 
     if not params.allow_opposite_strand_overlaps:
         transcripts = filter_overlapping_transcripts(transcripts)
@@ -351,7 +351,7 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
                                'will produce gene IDs with more than 6 digits.')
             gene = Gene(
                 gene_id=f'GML{gene_count:06d}',
-                start=group[0].start,
+                start=min(t.start for t in group),
                 end=max(t.end for t in group),
                 strand=group[0].strand,
                 transcripts=tuple(group),
