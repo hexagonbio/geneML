@@ -52,7 +52,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
             f"{transcript.score:.3f}",
             strand,
             ".",
-            f"ID={transcript_id};Parent={gene_id}",
+            f"ID={transcript_id};Parent={gene_id};SplicingType={transcript.splicing_type.name}",
         ))
 
         # exon records
