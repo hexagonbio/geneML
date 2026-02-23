@@ -50,7 +50,7 @@ class Transcript:
     events: tuple[GeneEvent, ...]
     score: float
     exons: tuple[Exon, ...]
-    group_id: int = -1
+    group_id: int
     transcript_id: str = ""
     transcript_variant: TranscriptVariant = TranscriptVariant.UNKNOWN
 
