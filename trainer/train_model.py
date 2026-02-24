@@ -91,6 +91,12 @@ def get_args():
         default=1,
         help='How many dataset chunks to pool, shuffle, and train on in a single fit call (default: 1)'
     )
+    parser.add_argument(
+        '--resume-from-checkpoint',
+        type=str,
+        default=None,
+        help='Path to .keras checkpoint file to resume training from (default: None)'
+    )
     args, _ = parser.parse_known_args()
     return args
 
@@ -278,20 +284,75 @@ def main():
     except Exception:
         pass
 
-    if N_GPUS > 1:
-        # https://keras.io/guides/distributed_training/
-        strategy = tensorflow.distribute.MirroredStrategy()
-        tee('Number of devices: {}'.format(strategy.num_replicas_in_sync))
-        with strategy.scope():
+    if args.resume_from_checkpoint:
+        tee(f"\033[1mLoading model from checkpoint: {args.resume_from_checkpoint}\033[0m")
+        # Load with custom objects
+        custom_objects = {
+            'categorical_crossentropy_2d_gene_ml': categorical_crossentropy_2d_gene_ml,
+            'WarmupSchedule': WarmupSchedule,
+            'DecayOnPlateauSchedule': DecayOnPlateauSchedule,
+        }
+        model = keras.models.load_model(args.resume_from_checkpoint, custom_objects=custom_objects)
+
+        # Extract the decay_factor Variable directly from the loaded schedule
+        # The optimizer._learning_rate holds the actual schedule object
+        loaded_schedule = model.optimizer._learning_rate
+        if hasattr(loaded_schedule, 'decay_factor'):
+            # Use the existing Variable from the loaded model
+            decay_factor = loaded_schedule.decay_factor
+            current_decay = float(tensorflow.keras.backend.get_value(decay_factor))
+            tee(f"Loaded decay_factor from checkpoint: {current_decay}")
+        else:
+            # Fallback: reconstruct the schedule with a new decay_factor
+            tee("Warning: Could not find decay_factor in loaded schedule, reconstructing")
+            try:
+                # Try to get the saved decay value from config
+                lr_config = model.optimizer.learning_rate.get_config()
+                saved_decay = lr_config.get('decay_factor', 1.0)
+            except (AttributeError, KeyError, TypeError):
+                saved_decay = 1.0
+
+            # Reconstruct the learning rate schedule
+            base_lr_schedule = WarmupSchedule(
+                start_lr=LEARNING_RATE * 0.01,
+                target_lr=LEARNING_RATE,
+                warmup_steps=warmup_steps,
+            )
+            decay_factor = tensorflow.Variable(saved_decay, trainable=False, dtype=tensorflow.float32, name='lr_decay_factor')
+            new_lr_schedule = DecayOnPlateauSchedule(base_lr_schedule, decay_factor)
+
+            # Replace the optimizer's learning rate schedule
+            model.optimizer.learning_rate = new_lr_schedule
+            tee(f"Reconstructed schedule with decay_factor: {saved_decay}")
+
+        # Get current learning rate
+        current_lr = model.optimizer.learning_rate
+        if callable(current_lr):
+            lr_value = float(tensorflow.keras.backend.get_value(current_lr(model.optimizer.iterations)))
+        else:
+            lr_value = float(tensorflow.keras.backend.get_value(current_lr))
+        tee(f"Resumed from checkpoint. Current learning rate: {lr_value:.5f}")
+
+        # Extract starting epoch from checkpoint filename (e.g., "ep10" -> start at 11)
+        match = re.search(r'_ep(\d+)\.keras', args.resume_from_checkpoint)
+        start_epoch = int(match.group(1)) + 1 if match else 1
+        tee(f"\033[1mResuming from epoch {start_epoch}\033[0m")
+    else:
+        if N_GPUS > 1:
+            # https://keras.io/guides/distributed_training/
+            strategy = tensorflow.distribute.MirroredStrategy()
+            tee('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+            with strategy.scope():
+                model = GeneML(L, W, AR, num_classes)
+                model.compile(loss=loss,
+                              optimizer=keras.optimizers.Adam(learning_rate=lr_schedule,
+                                                              weight_decay=WEIGHT_DECAY))
+        else:
             model = GeneML(L, W, AR, num_classes)
             model.compile(loss=loss,
                           optimizer=keras.optimizers.Adam(learning_rate=lr_schedule,
                                                           weight_decay=WEIGHT_DECAY))
-    else:
-        model = GeneML(L, W, AR, num_classes)
-        model.compile(loss=loss,
-                      optimizer=keras.optimizers.Adam(learning_rate=lr_schedule,
-                                                      weight_decay=WEIGHT_DECAY))
+        start_epoch = 1
     # model.summary()
 
     ###############################################################################
@@ -374,7 +435,7 @@ def main():
 
         return acceptor_score, donor_score
 
-    for epoch_num in range(1, args.num_epochs + 1):
+    for epoch_num in range(start_epoch, args.num_epochs + 1):
         # Shuffle indices for this epoch (no replacement)
         # Use epoch-based seed for deterministic but different permutation per epoch
         np.random.seed(SEED + epoch_num)
