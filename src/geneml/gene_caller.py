@@ -9,6 +9,7 @@ from geneml.model_loader import (
     MODEL_CDS_START,
     MODEL_EXON_END,
     MODEL_EXON_START,
+    MODEL_INTERGENIC,
     MODEL_IS_EXON,
     MODEL_IS_INTRON,
 )
@@ -127,7 +128,16 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
     pos = start_pos
     num_good_bases = 0
     last_good_base = None
+    consecutive_intergenic = 0
     while pos < len(preds[0]):
+        # Check for strong intergenic signal
+        if preds[MODEL_INTERGENIC, pos] > 0.8:
+            consecutive_intergenic += 1
+            if consecutive_intergenic >= 20:
+                break
+        else:
+            consecutive_intergenic = 0
+
         if preds[MODEL_IS_EXON, pos] > 0.2 or preds[MODEL_IS_INTRON, pos] > 0.2:
             num_good_bases += 1
             last_good_base = pos
