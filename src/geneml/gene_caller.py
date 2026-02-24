@@ -172,24 +172,20 @@ def ends_with_stop_codon(seq):
 
 
 @njit
-def check_exon_validity(preds: np.ndarray, start: int, end: int,
-                        min_avg_exon_score: float, max_intron_score: float) -> bool:
+def check_exon_validity(preds: np.ndarray, start: int, end: int) -> bool:
     """Check if an exon region is consistent with exonic predictions.
 
     Validates that a proposed exon is supported by the underlying model predictions.
-    Checks that:
-    1. No IS_INTRON score in the region exceeds the maximum threshold
-    2. Average IS_EXON score across the region meets the minimum threshold
+    Checks that the average IS_EXON score across the region exceeds the average IS_INTRON score,
+    indicating the region is more exon-like than intron-like.
 
     Args:
         preds: Model predictions array with shape (num_features, sequence_length)
         start: Start position of the exon
         end: End position of the exon
-        min_avg_exon_score: Minimum average IS_EXON score required across the region
-        max_intron_score: Maximum IS_INTRON score allowed at any position in the region
 
     Returns:
-        Boolean value indicating whether the exon passes consistency checks
+        Boolean value indicating whether mean exon score exceeds mean intron score
     """
     length = end - start
     if not length:
@@ -198,13 +194,7 @@ def check_exon_validity(preds: np.ndarray, start: int, end: int,
     intron_scores = preds[MODEL_IS_INTRON, start:end]
     exon_scores = preds[MODEL_IS_EXON, start:end]
 
-    if np.any(intron_scores > max_intron_score):
-        return False
-
-    if np.mean(exon_scores) < min_avg_exon_score:
-        return False
-
-    return True
+    return np.mean(exon_scores) > np.mean(intron_scores)
 
 
 @njit
