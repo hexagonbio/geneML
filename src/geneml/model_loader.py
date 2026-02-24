@@ -4,6 +4,7 @@ from functools import cache
 import numpy as np
 from keras.src.saving import load_model
 
+MODEL_INTERGENIC = 0
 MODEL_EXON_START = 1
 MODEL_EXON_END = 2
 MODEL_CDS_START = 3
