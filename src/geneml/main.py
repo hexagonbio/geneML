@@ -308,6 +308,10 @@ def parse_args(argv=None):
 def main():
     args = parse_args()
     params = build_params_namedtuple(args)
+
+    if params.cpu_only:
+        tf.config.set_visible_devices([], 'GPU')
+
     logfile = ''.join([params.basepath, '.log'])
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
     write_setup_info(params)
