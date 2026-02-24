@@ -273,9 +273,10 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
                 continue
             if exon_size > params.max_exon_size:
                 return num_ops      # Further exon ends make the exon even longer
-            if not check_exon_validity(preds, exon_start, exon_end,
-                                       min_avg_exon_score=0.05, max_intron_score=0.9):
-                return num_ops      # Further exon ends are also expected to be inconsistent
+            if not check_exon_validity(preds, exon_start, exon_end):
+                if exon_end - exon_start <= 20:
+                    continue # Short exons may be false positives, try further exon ends
+                return num_ops  # Further ends are likely invalid too
 
             # Build CDS incrementally - extract current exon sequence
             exon_seq = seq[exon_start:exon_end]
