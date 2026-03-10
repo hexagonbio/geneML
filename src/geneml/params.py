@@ -26,7 +26,7 @@ class Params(namedtuple('Params', (
     'model_path', 'context_length', 'strand',
     'contigs_filter', 'output_segs', 'output_genes', 'output_proteins',
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
-    'hardmask_repeats_min_size', 'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
+    'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
     'max_transcripts', 'allow_opposite_strand_overlaps',
     'min_exon_size', 'max_exon_size', 'dynamic_scoring',
     'cpu_only',
@@ -91,7 +91,6 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'min_gene_score': min_gene_score,
         'gene_candidates': args.gene_candidates,
         'dynamic_scoring': dynamic_scoring,
-        'hardmask_repeats_min_size': None,
 
         'single_recurse_max_num_ops': 100000,
         'recurse_region_max_num_ops': 200000,
