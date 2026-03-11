@@ -68,6 +68,53 @@ def write_setup_info(params):
     logger.info(parameter_info)
 
 
+def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[str, str], int]:
+    """Parse and validate contig sequences from an input file.
+
+    Reads genome records, restricted to IDs in contigs_filter if provided.
+    Sequences are converted to uppercase and validated to contain only valid nucleotide characters.
+
+    Args:
+        inpath: Path to an input sequence file in FASTA/GenBank/EMBL format
+        contigs_filter: Optional list of contig IDs to include
+
+    Returns:
+        Tuple of (contigs, genome_size) where contigs is a dictionary mapping contig ID to
+        sequence and genome_size is the total number of bases
+    """
+    contigs = {}
+    genome_size = 0
+    to_process = set(contigs_filter or [])
+
+    for record in seqio.parse(inpath):
+        if contigs_filter and record.id not in to_process:
+            # Skip this record
+            continue
+        to_process.discard(record.id)
+
+        seq = str(record.seq).upper()
+        # Check if sequence is valid
+        if not seq:
+            raise ValueError(f"Contig {record.id} has no sequence.")
+        invalid_chars = set(seq) - set('ACGTN')
+        if invalid_chars:
+            raise ValueError(
+                f"Sequence of contig {record.id} contains invalid characters: "
+                f"{', '.join(sorted(invalid_chars))}."
+            )
+
+        contigs[record.id] = seq
+        genome_size += len(seq)
+
+    if to_process:
+        raise ValueError(
+            f"The following contig IDs were specified with --contigs-filter "
+            f"but not found in input file: {', '.join(sorted(to_process))}"
+        )
+
+    return contigs, genome_size
+
+
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
     """
     Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
@@ -137,14 +184,7 @@ def process_genome(params: Params):
     num_cores = params.num_cores
     genome_start_time = time.time()
 
-    contigs = {}
-    genome_size = 0
-    for record in seqio.parse(params.inpath):
-        if params.contigs_filter is not None and record.id not in params.contigs_filter:
-            continue
-        seq = str(record.seq).upper()
-        contigs[record.id] = seq
-        genome_size += len(seq)
+    contigs, genome_size = parse_contigs(params.inpath, params.contigs_filter)
 
     # Disable dynamic scoring if the input sequence is too short
     if params.dynamic_scoring and genome_size < 100_000:
