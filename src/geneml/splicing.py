@@ -1,15 +1,15 @@
 import logging
 
-from geneml.types import SplicingType, Transcript
+from geneml.types import Exon, SplicingType, Transcript
 
 logger = logging.getLogger("geneml")
 
-def get_ordered_introns(exons: list, strand: int) -> list[tuple[int,int]]:
+def get_ordered_introns(exons: list[Exon] | tuple[Exon, ...], strand: int) -> list[tuple[int,int]]:
     """
     Returns introns (donor, acceptor) in transcriptional order.
 
     Args:
-        exons: list of Exon objects, sorted by genomic position.
+        exons: List or tuple of Exon objects, sorted by genomic position.
         strand: +1 for forward strand, -1 for reverse strand.
 
     Returns:
