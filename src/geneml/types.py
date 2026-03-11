@@ -17,7 +17,7 @@ GeneEventNumbaType = typeof(GeneEvent(1, CDS_START, np.float32(0.5)))
 GeneCallNumbaType = typeof(typed.List.empty_list(GeneEventNumbaType))
 
 
-class SplicingType(Enum):
+class TranscriptVariant(Enum):
     UNKNOWN = 0
     PRIMARY = 1
     INTRON_RETENTION = 2
@@ -52,7 +52,7 @@ class Transcript:
     exons: tuple[Exon, ...]
     group_id: int = -1
     transcript_id: str = ""
-    splicing_type: SplicingType = SplicingType.UNKNOWN
+    transcript_variant: TranscriptVariant = TranscriptVariant.UNKNOWN
 
     def __post_init__(self):
         if not self.exons:
@@ -66,17 +66,17 @@ class Transcript:
     def set_transcript_id(self, transcript_id: str):
         self.transcript_id = transcript_id
 
-    def set_splicing_type(self, splicing_type: SplicingType):
-        self.splicing_type = splicing_type
+    def set_transcript_variant(self, transcript_variant: TranscriptVariant):
+        self.transcript_variant = transcript_variant
 
-    def classify_splicing_type(self, primary_transcript: 'Transcript'):
-        assert primary_transcript.splicing_type == SplicingType.PRIMARY
+    def classify_transcript_variant(self, primary_transcript: 'Transcript'):
+        assert primary_transcript.transcript_variant == TranscriptVariant.PRIMARY
 
         if self.exons == primary_transcript.exons:
-            return SplicingType.PRIMARY
+            return TranscriptVariant.PRIMARY
 
-        from geneml.splicing import get_alternative_splicing_type
-        return get_alternative_splicing_type(primary_transcript, self)
+        from geneml.splicing import get_alternative_transcript_variant
+        return get_alternative_transcript_variant(primary_transcript, self)
 
     def overlaps_with(self, other: 'Transcript', ignore_strand: bool = False) -> bool:
         # by default only consider overlaps on the same strand
@@ -107,8 +107,8 @@ class Gene:
 
             # First transcript always denotes the primary splicing type
             if i == 0:
-                transcript.set_splicing_type(SplicingType.PRIMARY)
+                transcript.set_transcript_variant(TranscriptVariant.PRIMARY)
                 primary = transcript
             else:
-                splicing_type = transcript.classify_splicing_type(primary)
-                transcript.set_splicing_type(splicing_type)
+                transcript_variant = transcript.classify_transcript_variant(primary)
+                transcript.set_transcript_variant(transcript_variant)

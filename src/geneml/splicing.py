@@ -1,6 +1,6 @@
 import logging
 
-from geneml.types import Exon, SplicingType, Transcript
+from geneml.types import Exon, Transcript, TranscriptVariant
 
 logger = logging.getLogger("geneml")
 
@@ -53,8 +53,8 @@ def get_introns_in_range(introns: list[tuple[int,int]], range: tuple[int,int], s
         raise ValueError(f"Invalid strand: {strand}")
 
 
-def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> SplicingType:
-    """Classify alternative splicing events between a primary and alternative transcript.
+def get_alternative_transcript_variant(primary: Transcript, alt: Transcript) -> TranscriptVariant:
+    """Classify the transcript variant of an alternative transcript.
 
     Compares intron junctions and terminal exon boundaries to detect exon skipping,
     alternative 3' and 5' splice sites, intron retention, and alternative first/last
@@ -66,7 +66,7 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
         alt: The alternative transcript being classified.
 
     Returns:
-        The assigned SplicingType for the alternative transcript.
+        The assigned TranscriptVariant for the alternative transcript.
     """
     assert primary.exons != alt.exons, (
         f"Identical transcripts: {primary.transcript_id} and {alt.transcript_id}"
@@ -110,9 +110,9 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
         raise ValueError(f"Invalid strand: {strand}")
 
     if alt_first != primary_first:
-        events.add(SplicingType.ALT_FIRST_EXON)
+        events.add(TranscriptVariant.ALT_FIRST_EXON)
     if alt_last != primary_last:
-        events.add(SplicingType.ALT_LAST_EXON)
+        events.add(TranscriptVariant.ALT_LAST_EXON)
 
     # 2. EXON SKIPPING
     for s, e in P:
@@ -121,7 +121,7 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
             s2, e2 = A[i + 1]
 
             if s1 == s and e2 == e:
-                events.add(SplicingType.EXON_SKIPPING)
+                events.add(TranscriptVariant.EXON_SKIPPING)
                 consumed_P.add((s, e))
                 consumed_A.add((s1, e1))
                 consumed_A.add((s2, e2))
@@ -132,7 +132,7 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
             s2, e2 = P[i + 1]
 
             if s1 == s and e2 == e:
-                events.add(SplicingType.EXON_SKIPPING)
+                events.add(TranscriptVariant.EXON_SKIPPING)
                 consumed_A.add((s, e))
                 consumed_P.add((s1, e1))
                 consumed_P.add((s2, e2))
@@ -148,18 +148,18 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
                 # Skip if this is in a terminal exon already recognized as alt event
                 at_alt_first_exon = (
                     ((s1, e1) == P[0] or (s2, e2) == A[0])
-                    and SplicingType.ALT_FIRST_EXON in events
+                    and TranscriptVariant.ALT_FIRST_EXON in events
                 )
                 at_alt_last_exon = (
                     ((s1, e1) == P[-1] or (s2, e2) == A[-1])
-                    and SplicingType.ALT_LAST_EXON in events
+                    and TranscriptVariant.ALT_LAST_EXON in events
                 )
                 if not (at_alt_first_exon or at_alt_last_exon):
-                    events.add(SplicingType.ALT_3_SPLICE_SITE)
+                    events.add(TranscriptVariant.ALT_3_SPLICE_SITE)
                 consumed_P.add((s1, e1))
                 consumed_A.add((s2, e2))
             if e1 == e2 and s1 != s2:
-                events.add(SplicingType.ALT_5_SPLICE_SITE)
+                events.add(TranscriptVariant.ALT_5_SPLICE_SITE)
                 consumed_P.add((s1, e1))
                 consumed_A.add((s2, e2))
 
@@ -168,13 +168,13 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
     remaining_A = (A_set - P_set) - consumed_A
 
     if remaining_P or remaining_A:
-        events.add(SplicingType.INTRON_RETENTION)
+        events.add(TranscriptVariant.INTRON_RETENTION)
 
     assert events, (
-        f"No splicing events detected between {primary.transcript_id} and {alt.transcript_id}; "
+        f"No events detected between {primary.transcript_id} and {alt.transcript_id}; "
         f"this should not happen"
     )
 
     if len(events) == 1:
         return events.pop()
-    return SplicingType.COMPLEX
+    return TranscriptVariant.COMPLEX
