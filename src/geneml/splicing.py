@@ -88,17 +88,18 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
 
     # 1. ALTERNATIVE FIRST / LAST EXON
     if strand == 1:
-        if alt.exons[0].start != primary.exons[0].start:
-            events.add(SplicingType.ALT_FIRST_EXON)
-        if alt.exons[-1].end != primary.exons[-1].end:
-            events.add(SplicingType.ALT_LAST_EXON)
+        primary_first, alt_first = primary.start, alt.start
+        primary_last, alt_last = primary.end, alt.end
     elif strand == -1:
-        if alt.exons[0].end != primary.exons[0].end:
-            events.add(SplicingType.ALT_FIRST_EXON)
-        if alt.exons[-1].start != primary.exons[-1].start:
-            events.add(SplicingType.ALT_LAST_EXON)
+        primary_first, alt_first = primary.end, alt.end
+        primary_last, alt_last = primary.start, alt.start
     else:
         raise ValueError(f"Invalid strand: {strand}")
+
+    if alt_first != primary_first:
+        events.add(SplicingType.ALT_FIRST_EXON)
+    if alt_last != primary_last:
+        events.add(SplicingType.ALT_LAST_EXON)
 
     # 2. EXON SKIPPING
     for s, e in P:
