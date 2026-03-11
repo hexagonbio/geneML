@@ -132,10 +132,16 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
             if (s2, e2) in consumed_A:
                 continue
             if s1 == s2 and e1 != e2:
-                # Skip if this is the terminal exon boundary (already counted as ALT_LAST_EXON)
-                if (s1, e1) == P[-1] or (s2, e2) == A[-1] and SplicingType.ALT_LAST_EXON in events:
-                    pass
-                else:
+                # Skip if this is in a terminal exon already recognized as alt event
+                at_alt_first_exon = (
+                    ((s1, e1) == P[0] or (s2, e2) == A[0])
+                    and SplicingType.ALT_FIRST_EXON in events
+                )
+                at_alt_last_exon = (
+                    ((s1, e1) == P[-1] or (s2, e2) == A[-1])
+                    and SplicingType.ALT_LAST_EXON in events
+                )
+                if not (at_alt_first_exon or at_alt_last_exon):
                     events.add(SplicingType.ALT_3_SPLICE_SITE)
                 consumed_P.add((s1, e1))
                 consumed_A.add((s2, e2))
