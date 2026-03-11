@@ -1,5 +1,8 @@
+import logging
+
 from geneml.types import SplicingType, Transcript
 
+logger = logging.getLogger("geneml")
 
 def get_ordered_introns(exons: list, strand: int) -> list[tuple[int,int]]:
     """
@@ -65,7 +68,9 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
     Returns:
         The assigned SplicingType for the alternative transcript.
     """
-    assert primary is not alt, "Should not compare to self"
+    assert primary.exons != alt.exons, (
+        f"Identical transcripts: {primary.transcript_id} and {alt.transcript_id}"
+    )
 
     events = set()
     strand = primary.strand
@@ -76,6 +81,14 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
 
     # Only compare introns within the shared genomic region of the two transcripts
     shared_range = (max(primary.start, alt.start), min(primary.end, alt.end))
+
+    assert shared_range[0] < shared_range[1], (
+            "Alternative transcript %s (%s-%s) does not overlap with "
+            "primary transcript %s (%s-%s)",
+            alt.transcript_id, alt.start, alt.end,
+            primary.transcript_id, primary.start, primary.end,
+        )
+
     P = get_introns_in_range(P, shared_range, strand)
     A = get_introns_in_range(A, shared_range, strand)
 
@@ -157,10 +170,11 @@ def get_alternative_splicing_type(primary: Transcript, alt: Transcript) -> Splic
     if remaining_P or remaining_A:
         events.add(SplicingType.INTRON_RETENTION)
 
+    assert events, (
+        f"No splicing events detected between {primary.transcript_id} and {alt.transcript_id}; "
+        f"this should not happen"
+    )
 
-    # Assign final splicing type
-    if not events:
-        return SplicingType.UNKNOWN
-    elif len(events) == 1:
+    if len(events) == 1:
         return events.pop()
     return SplicingType.COMPLEX
