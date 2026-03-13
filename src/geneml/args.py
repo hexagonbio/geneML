@@ -118,7 +118,7 @@ def parse_args(argv=None):
     advanced.add_argument('--gene-candidates',
                           type=int,
                           default=5000,
-                          help=("Maximum number of gene candidates to consider "
+                          help=("Maximum number of gene candidates to consider per locus "
                                 "(default: %(default)s)."))
 
     args = parser.parse_args(argv)
