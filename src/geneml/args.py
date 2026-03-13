@@ -56,6 +56,12 @@ def gene_score(value) -> str | float:
 def check_args(parser, args):
     if args.model and not args.context_length:
         parser.error("--context-length is required when using a custom model.")
+    if args.min_exon_size > args.max_exon_size:
+        parser.error(f"--min-exon-size ({args.min_exon_size}) cannot exceed "
+                     f"--max-exon-size ({args.max_exon_size}).")
+    if args.min_intron_size > args.max_intron_size:
+        parser.error(f"--min-intron-size ({args.min_intron_size}) cannot exceed "
+                     f"--max-intron-size ({args.max_intron_size}).")
 
 
 def parse_args(argv=None):
