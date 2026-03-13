@@ -15,13 +15,13 @@ MODEL_IS_INTRON = 6
 DEFAULT_MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "models/geneML_default.keras"))
 
 class ResidualModelBase:
-    def __init__(self, path, context_length):
+    def __init__(self, path, context_length) -> None:
         self.specify_model_parameters()
 
         self.model = load_model(path, compile=False)
         self.context_length = context_length
 
-    def predict(self, seq, return_dict=True):
+    def predict(self, seq, return_dict=True) -> dict[str, np.ndarray] | np.ndarray:
         x = self._one_hot_encode('N'*(self.context_length//2) + seq.upper() + 'N'*(self.context_length//2))[None, :]
         y = self.model(x, training=False).numpy()
 
@@ -30,7 +30,7 @@ class ResidualModelBase:
         else:
             return y[0].T
 
-    def _one_hot_encode(self, seq):
+    def _one_hot_encode(self, seq) -> np.ndarray:
         """ version from the spliceai package """
 
         map = np.asarray([[0, 0, 0, 0],
@@ -44,7 +44,7 @@ class ResidualModelBase:
 
         return map[np.frombuffer(seq.encode('ascii'), np.int8) % 5]
 
-    def specify_model_parameters(self):
+    def specify_model_parameters(self) -> None:
         """
         This method should be overridden by subclasses to specify model parameters.
         """
@@ -55,7 +55,7 @@ class ExonIntron6ClassModel(ResidualModelBase):
     """
     Residual model with an expanded number of classes trained on genes plus some sequence context outside of genes
     """
-    def specify_model_parameters(self):
+    def specify_model_parameters(self) -> None:
         self.annotations = [
             'none',
             'exon_start',  # splice acceptor
@@ -68,7 +68,7 @@ class ExonIntron6ClassModel(ResidualModelBase):
 
 
 @cache
-def get_cached_gene_ml_model(model_path, context_length):
+def get_cached_gene_ml_model(model_path, context_length) -> ExonIntron6ClassModel:
     if not model_path:
         model_path = DEFAULT_MODEL_PATH
     return ExonIntron6ClassModel(path=model_path, context_length=context_length)

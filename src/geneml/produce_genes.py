@@ -12,7 +12,7 @@ from geneml.types import CDS_END, CDS_START, EXON_END, EXON_START, Exon, Gene, G
 logger = logging.getLogger("geneml")
 
 
-def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100000):
+def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100000) -> np.ndarray:
     """
     Predicts the sequence in chunks of a given size to control memory usage, with some padding to handle
     the sequence context

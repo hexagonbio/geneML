@@ -49,7 +49,7 @@ def prettify_gene_event(event: GeneEvent) -> str:
 
 
 @njit
-def get_gene_ml_events(preds: np.ndarray, params: Params):
+def get_gene_ml_events(preds: np.ndarray, params: Params) -> list[GeneEvent]:
     cds_starts = np.where(preds[MODEL_CDS_START] >= params.cds_start_min_score)[0]
     cds_ends = np.where(preds[MODEL_CDS_END] >= params.cds_end_min_score)[0]
     exon_starts = np.where(preds[MODEL_EXON_START] >= params.exon_start_min_score)[0]
@@ -153,7 +153,7 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
 
 
 @njit
-def starts_with_start_codon(seq):
+def starts_with_start_codon(seq) -> bool:
     # note: assumes seq is all uppercase
     if len(seq) < 3:
         return False
@@ -162,7 +162,7 @@ def starts_with_start_codon(seq):
 
 
 @njit
-def count_stop_codons(seq):
+def count_stop_codons(seq) -> int:
     # note: assumes seq is all uppercase
     count = 0
     for i in range(0, len(seq) - 2, 3):
@@ -173,7 +173,7 @@ def count_stop_codons(seq):
 
 
 @njit
-def ends_with_stop_codon(seq):
+def ends_with_stop_codon(seq) -> bool:
     # note: assumes seq is all uppercase
     if len(seq) < 3:
         return False
@@ -595,8 +595,9 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
 
 
 @njit
-def split_into_genes(group: list[tuple[float, list[GeneEvent]]]) -> list:
-    """Split overlapping gene calls into gene groups.
+def split_into_genes(group: list[tuple[float, list[GeneEvent]]]
+                     ) -> list[list[tuple[float, list[GeneEvent]]]]:
+    """Split overlapping gene calls into gene groups anchored by primary transcripts.
 
     Uses anchor transcripts (selected by start position and score) to define gene loci boundaries.
     Candidates starting before an anchor's end are grouped together,

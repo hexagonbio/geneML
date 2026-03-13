@@ -6,7 +6,7 @@ from geneml import __version__
 logger = logging.getLogger("geneml")
 
 
-def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
+def log_uncaught_exceptions(exc_type, exc_value, exc_traceback) -> None:
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
@@ -15,7 +15,7 @@ def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
 sys.excepthook = log_uncaught_exceptions
 
 
-def setup_logger(logfile, debug = False, verbose = False):
+def setup_logger(logfile, debug = False, verbose = False) -> None:
     log_format = '%(levelname)-8s %(asctime)s   %(message)s'
     date_format = "%d/%m %H:%M:%S"
 
@@ -40,7 +40,7 @@ def setup_logger(logfile, debug = False, verbose = False):
         logger.addHandler(handler)
 
 
-def write_setup_info(params):
+def write_setup_info(params) -> None:
     logger.info("Running geneML version %s", __version__)
     logger.info("Command line: %s", " ".join(sys.argv[1:]))
     parameter_info = '\n'.join(["Parameters:", params.to_json(indent=2)])

@@ -37,9 +37,9 @@ class Exon:
     score: float
     phase: int
 
-    def __post_init__(self):
-        if not self.events or len(self.events) != 2:
-            raise ValueError('An exon must have exactly two gene events (start and end).')
+def __post_init__(self) -> None:
+    if not self.events or len(self.events) != 2:
+        raise ValueError('An exon must have exactly two gene events (start and end).')
 
 
 @dataclass
@@ -54,7 +54,7 @@ class Transcript:
     transcript_id: str = ""
     transcript_variant: TranscriptVariant = TranscriptVariant.UNKNOWN
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.exons:
             raise ValueError('A transcript must have at least one exon.')
 
@@ -63,13 +63,13 @@ class Transcript:
                 raise ValueError(f'Exon ({exon.start}, {exon.end}) '
                                  f'is out of transcript bounds ({self.start}, {self.end}).')
 
-    def set_transcript_id(self, transcript_id: str):
+    def set_transcript_id(self, transcript_id: str) -> None:
         self.transcript_id = transcript_id
 
-    def set_transcript_variant(self, transcript_variant: TranscriptVariant):
+    def set_transcript_variant(self, transcript_variant: TranscriptVariant) -> None:
         self.transcript_variant = transcript_variant
 
-    def classify_transcript_variant(self, primary_transcript: 'Transcript'):
+    def classify_transcript_variant(self, primary_transcript: 'Transcript') -> TranscriptVariant:
         assert primary_transcript.transcript_variant == TranscriptVariant.PRIMARY
 
         if self.exons == primary_transcript.exons:
@@ -94,7 +94,7 @@ class Gene:
     transcripts: tuple[Transcript, ...]
     score: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.transcripts:
             raise ValueError('A gene must have at least one transcript.')
 
