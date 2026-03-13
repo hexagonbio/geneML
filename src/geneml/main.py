@@ -137,7 +137,7 @@ def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
     return reordered_contigs
 
 
-def process_genome(params: Params):
+def process_genome(params: Params) -> None:
     num_cores = params.num_cores
     genome_start_time = time.time()
 
@@ -223,7 +223,7 @@ def process_genome(params: Params):
                 params.inpath, genome_size/1e6, elapsed/60)
 
 
-def main():
+def main() -> None:
     args = parse_args()
     params = build_params_namedtuple(args)
 

@@ -16,7 +16,7 @@ from geneml.model_loader import (
 from geneml.types import Gene
 
 
-def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -> list:
+def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -> list[tuple]:
     gff_rows = []
     gene_id = gene.gene_id
     strand = '+' if gene.strand == 1 else '-'
@@ -86,7 +86,7 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
     return gff_rows
 
 
-def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str):
+def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str) -> None:
     gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
@@ -134,7 +134,7 @@ def build_cds_sequences(contigs: dict[str, str], results: dict[str, list[Gene]]
     return cdses_by_transcript
 
 
-def write_fasta(cdses_by_transcript: dict[str, str], path: str, sequence_type: str):
+def write_fasta(cdses_by_transcript: dict[str, str], path: str, sequence_type: str) -> None:
     if sequence_type == 'cds':
         to_write = cdses_by_transcript
     elif sequence_type == 'protein':

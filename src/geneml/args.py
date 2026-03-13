@@ -1,5 +1,6 @@
 import argparse
 import os
+from argparse import Namespace
 
 from geneml import __version__
 from geneml.params import Strand
@@ -167,7 +168,7 @@ def check_args(parser, args) -> None:
     check_paths(parser, args)
 
 
-def parse_args(argv=None):
+def parse_args(argv=None) -> Namespace:
     version_string = f"geneML {__version__}"
     parser = argparse.ArgumentParser(description=version_string, add_help=False)
 

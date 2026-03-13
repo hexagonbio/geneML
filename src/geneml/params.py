@@ -3,6 +3,7 @@ import os
 from argparse import Namespace
 from collections import namedtuple
 from enum import Enum
+from typing import Any
 
 
 class Strand(Enum):
@@ -12,7 +13,7 @@ class Strand(Enum):
 
 
 class EnhancedJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
+    def default(self, obj) -> Any:
         if isinstance(obj, Enum):
             return obj.value
         if hasattr(obj, "_asdict"):  # for namedtuples
@@ -31,11 +32,11 @@ class Params(namedtuple('Params', (
     'min_exon_size', 'max_exon_size', 'dynamic_scoring',
     'cpu_only',
 ))):
-    def to_json(self, **kwargs):
+    def to_json(self, **kwargs) -> str:
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
 
 
-def get_basepath(inpath, outpath):
+def get_basepath(inpath, outpath) -> str:
     if outpath:
         return os.path.splitext(outpath)[0]
     return os.path.splitext(inpath)[0]
