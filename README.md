@@ -146,5 +146,5 @@ advanced options:
   --exon-end-min-score EXON_END_MIN_SCORE
                         Minimum model score for considering an exon end (default: 0.01).
   --gene-candidates GENE_CANDIDATES
-                        Maximum number of gene candidates to consider (default: 5000).
+                        Maximum number of gene candidates to consider per locus (default: 5000).
 ```
