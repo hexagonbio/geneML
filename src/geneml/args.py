@@ -4,6 +4,55 @@ from geneml import __version__
 from geneml.params import Strand
 
 
+def positive_int(value) -> int:
+    """Validate that input is a positive integer.
+
+    Args:
+        value: Input value to validate.
+
+    Returns:
+        The validated integer value.
+    """
+    ivalue = int(value)
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"Must be a positive integer, got {value}.")
+    return ivalue
+
+
+def unit_float(value) -> float:
+    """Validate that input is a float in the range [0, 1].
+
+    Args:
+        value: Input value to validate.
+
+    Returns:
+        The validated float value.
+    """
+    fvalue = float(value)
+    if not (0.0 <= fvalue <= 1.0):
+        raise argparse.ArgumentTypeError(f"Must be between 0 and 1, got {value}.")
+    return fvalue
+
+
+def gene_score(value) -> str | float:
+    """Validate gene score as 'dynamic' or a float in the range [0, 1].
+
+    Args:
+        value: Input value to validate.
+
+    Returns:
+        The string 'dynamic' or a validated float value.
+    """
+    if value == 'dynamic':
+        return value
+    try:
+        return unit_float(value)
+    except argparse.ArgumentTypeError as e:
+        raise argparse.ArgumentTypeError(
+            f"Must be a float between 0 and 1, or 'dynamic', got {value}."
+            ) from e
+
+
 def check_args(parser, args):
     if args.model and not args.context_length:
         parser.error("--context-length is required when using a custom model.")
@@ -36,10 +85,10 @@ def parse_args(argv=None):
                         type=str,
                         help="Path to model file (default: models/geneML_default.keras).")
     parser.add_argument('-cl', '--context-length',
-                        type=int,
+                        type=positive_int,
                         help="Context length of the model.")
     parser.add_argument('-c', '--cores',
-                        type=int,
+                        type=positive_int,
                         help="Number of cores to use for processing (default: all available).")
 
     advanced = parser.add_argument_group("advanced options")
@@ -65,7 +114,7 @@ def parse_args(argv=None):
                           help=("Instead of running gene calling, "
                                 "output the raw model scores as a .seg file."))
     advanced.add_argument('--max-transcripts',
-                          type=int,
+                          type=positive_int,
                           default=5,
                           help="Maximum number of transcripts per gene (default: %(default)s).")
     advanced.add_argument('--allow-opposite-strand-overlaps',
@@ -74,49 +123,49 @@ def parse_args(argv=None):
                           help=("Predict overlapping genes on opposite strands "
                                 "(default: %(default)s)."))
     advanced.add_argument('--min-gene-score',
-                          type=str,
+                          type=gene_score,
                           default='dynamic',
                           help=("Minimum gene score for gene reporting. "
                                 "Can be a float value or 'dynamic' (default: %(default)s). "
                                 "Dynamic mode requires >=100,000 bp total input."))
     advanced.add_argument('--min-exon-size',
-                          type=int,
+                          type=positive_int,
                           default=1,
                           help="Minimum exon size (default: %(default)s).")
     advanced.add_argument('--max-exon-size',
-                          type=int,
+                          type=positive_int,
                           default=30000,
                           help="Maximum exon size (default: %(default)s).")
     advanced.add_argument('--min-intron-size',
-                          type=int,
+                          type=positive_int,
                           default=10,
                           help="Minimum intron size (default: %(default)s).")
     advanced.add_argument('--max-intron-size',
-                          type=int,
+                          type=positive_int,
                           default=400,
                           help="Maximum intron size (default: %(default)s).")
     advanced.add_argument('--cds-start-min-score',
-                          type=float,
+                          type=unit_float,
                           default=0.01,
                           help=("Minimum model score for considering a CDS start "
                                 "(default: %(default)s)."))
     advanced.add_argument('--cds-end-min-score',
-                          type=float,
+                          type=unit_float,
                           default=0.01,
                           help=("Minimum model score for considering a CDS end "
                                 "(default: %(default)s)."))
     advanced.add_argument('--exon-start-min-score',
-                          type=float,
+                          type=unit_float,
                           default=0.01,
                           help=("Minimum model score for considering an exon start "
                                 "(default: %(default)s)."))
     advanced.add_argument('--exon-end-min-score',
-                          type=float,
+                          type=unit_float,
                           default=0.01,
                           help=("Minimum model score for considering an exon end "
                                 "(default: %(default)s)."))
     advanced.add_argument('--gene-candidates',
-                          type=int,
+                          type=positive_int,
                           default=5000,
                           help=("Maximum number of gene candidates to consider per locus "
                                 "(default: %(default)s)."))
