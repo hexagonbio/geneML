@@ -37,9 +37,9 @@ class Exon:
     score: float
     phase: int
 
-def __post_init__(self):
-    if not self.events or len(self.events) != 2:
-        raise ValueError('An exon must have exactly two gene events (start and end).')
+    def __post_init__(self):
+        if not self.events or len(self.events) != 2:
+            raise ValueError('An exon must have exactly two gene events (start and end).')
 
 
 @dataclass
