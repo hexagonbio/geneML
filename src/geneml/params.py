@@ -57,6 +57,66 @@ class Params(namedtuple('Params', (
         """
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
 
+    def to_log_json(self, **kwargs) -> str:
+        """Serialize parameters to grouped JSON for log output.
+
+        Args:
+            **kwargs: Extra arguments passed to json.dumps.
+
+        Returns:
+            JSON string representation grouped by parameter category.
+        """
+        grouped_params = {
+            'paths': {
+                'inpath': self.inpath,
+                'outpath': self.outpath,
+                'basepath': self.basepath,
+                'contigs_filter': self.contigs_filter,
+            },
+            'model': {
+                'model_path': self.model_path,
+                'context_length': self.context_length,
+            },
+            'gene_calling': {
+                'strand': self.strand,
+                'max_transcripts': self.max_transcripts,
+                'allow_opposite_strand_overlaps': (
+                    self.allow_opposite_strand_overlaps
+                ),
+                'gene_candidates': self.gene_candidates,
+            },
+            'thresholds': {
+                'dynamic_scoring': self.dynamic_scoring,
+                'min_gene_score': self.min_gene_score,
+                'min_exon_size': self.min_exon_size,
+                'max_exon_size': self.max_exon_size,
+                'min_intron_size': self.min_intron_size,
+                'max_intron_size': self.max_intron_size,
+                'cds_start_min_score': self.cds_start_min_score,
+                'cds_end_min_score': self.cds_end_min_score,
+                'exon_start_min_score': self.exon_start_min_score,
+                'exon_end_min_score': self.exon_end_min_score,
+            },
+            'outputs': {
+                'output_segs': self.output_segs,
+                'output_genes': self.output_genes,
+                'output_proteins': self.output_proteins,
+            },
+            'runtime': {
+                'num_cores': self.num_cores,
+                'cpu_only': self.cpu_only,
+            },
+            'logging': {
+                'debug': self.debug,
+                'verbose': self.verbose,
+            },
+            'internal_limits': {
+                'single_recurse_max_num_ops': self.single_recurse_max_num_ops,
+                'recurse_region_max_num_ops': self.recurse_region_max_num_ops,
+            },
+        }
+        return json.dumps(grouped_params, cls=EnhancedJSONEncoder, **kwargs)
+
 
 def get_basepath(inpath, outpath) -> str:
     """Resolve the base output path without extension.
