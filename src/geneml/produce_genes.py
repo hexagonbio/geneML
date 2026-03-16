@@ -13,9 +13,16 @@ logger = logging.getLogger("geneml")
 
 
 def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100000) -> np.ndarray:
-    """
-    Predicts the sequence in chunks of a given size to control memory usage, with some padding to handle
-    the sequence context
+    """Predict model scores for a sequence in memory-safe chunks.
+
+    Args:
+        model: Loaded model wrapper used for inference.
+        seq: DNA sequence to score.
+        context_length: Model context window length.
+        chunk_size: Maximum chunk size processed per inference call.
+
+    Returns:
+        Concatenated score matrix with shape (num_features, sequence_length).
     """
     seq_len = len(seq)
     pred_list = []
@@ -32,6 +39,17 @@ def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100
 
 def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
                  contig_length: int, is_rc: bool) -> list[Exon]:
+    """Convert ordered gene events into Exon objects with phase metadata.
+
+    Args:
+        gene_events: Ordered start/end events defining exon boundaries.
+        preds: Model score matrix used for exon scoring.
+        contig_length: Length of the contig sequence.
+        is_rc: Whether the events come from reverse-complement predictions.
+
+    Returns:
+        List of Exon objects in transcript order.
+    """
     if not gene_events:
         return []
     assert len(gene_events) % 2 == 0, f'There should be an even number of gene events: {gene_events}'
@@ -65,6 +83,17 @@ def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
 
 def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]]],
                        preds: np.ndarray, contig_length: int, is_rc: bool) -> list[Transcript]:
+    """Create Transcript objects from scored gene-call event chains.
+
+    Args:
+        scored_gene_calls: Tuples of group ID, score, and event chain.
+        preds: Model score matrix used for exon scoring.
+        contig_length: Length of the contig sequence.
+        is_rc: Whether calls originate from reverse-complement predictions.
+
+    Returns:
+        List of Transcript objects.
+    """
     transcripts = []
     strand = -1 if is_rc else 1
     for group_id, score, gene_events in scored_gene_calls:
@@ -88,7 +117,14 @@ def create_transcripts(scored_gene_calls: list[tuple[int, float, list[GeneEvent]
 
 
 def filter_overlapping_transcripts(transcripts: list[Transcript]) -> list[Transcript]:
-    """ This filters overlapping transcripts on opposite strands, keeping the higher scoring one """
+    """Filter opposite-strand overlaps by retaining the higher-scoring transcript.
+
+    Args:
+        transcripts: Transcript candidates to evaluate.
+
+    Returns:
+        Filtered transcript list.
+    """
 
     if not transcripts:
         return []
@@ -109,10 +145,22 @@ def filter_overlapping_transcripts(transcripts: list[Transcript]) -> list[Transc
 
 def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray],
                      seq: str, rc_seq: Optional[str], contig_id: str, params: Params) -> list[Transcript]:
-    """
+    """Build transcript candidates from forward and reverse model predictions.
+
     Build gene calls from a sequence using the GeneML model. Note that the coordinates in filtered_scored_gene_calls are
     relative to the sequence and the strand, so they are not absolute coordinates in the genome or even of the input
     sequence. See build_coords for converting to genomic absolute coordinates.
+
+    Args:
+        preds: Forward-strand model scores, or None.
+        rc_preds: Reverse-strand model scores, or None.
+        seq: Forward-strand DNA sequence.
+        rc_seq: Reverse-complement sequence when available.
+        contig_id: Contig identifier for logging.
+        params: Runtime parameters.
+
+    Returns:
+        List of predicted transcripts.
     """
     if preds is None and rc_preds is None:
         raise ValueError("Cannot build gene calls without any model predictions.")

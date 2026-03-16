@@ -36,6 +36,14 @@ GroupedGeneCallType = typeof((0, 0.0, typed.List.empty_list(GeneEventNumbaType))
 
 @njit
 def python_time() -> float:
+    """Return wall-clock time from Python within nopython-compatible code.
+
+    Args:
+        None.
+
+    Returns:
+        Current UNIX timestamp in seconds.
+    """
     with objmode(out='float64'):
         out = time.time()
     return out
@@ -43,6 +51,14 @@ def python_time() -> float:
 
 @njit
 def prettify_gene_event(event: GeneEvent) -> str:
+    """Format a gene event as a short human-readable string.
+
+    Args:
+        event: Gene event tuple.
+
+    Returns:
+        Formatted representation "pos:type:score".
+    """
     with objmode(out='unicode_type'):
         out = '{pos}:{type}:{score:.1f}'.format(pos=event.pos, type=event.type, score=event.score)
     return out
@@ -50,6 +66,15 @@ def prettify_gene_event(event: GeneEvent) -> str:
 
 @njit
 def get_gene_ml_events(preds: np.ndarray, params: Params) -> list[GeneEvent]:
+    """Extract candidate gene boundary events from model score tracks.
+
+    Args:
+        preds: Model predictions array.
+        params: Runtime thresholds for each event type.
+
+    Returns:
+        Sorted list of candidate GeneEvent entries.
+    """
     cds_starts = np.where(preds[MODEL_CDS_START] >= params.cds_start_min_score)[0]
     cds_ends = np.where(preds[MODEL_CDS_END] >= params.cds_end_min_score)[0]
     exon_starts = np.where(preds[MODEL_EXON_START] >= params.exon_start_min_score)[0]
@@ -92,6 +117,7 @@ def filter_events(one_gene_events: list[GeneEvent], percentile_cutoff: int,
 
     def filter_exon_events(events: list[GeneEvent], percentile: int,
                            min_events: int, max_events: int) -> list[GeneEvent]:
+        """Filter exon boundary events by score while enforcing min/max counts."""
         percentile_cutoff = np.percentile([e.score for e in events], percentile)
         threshold = min(percentile_cutoff, 0.1)
         filtered = [e for e in events if e.score >= threshold]
@@ -123,6 +149,16 @@ def filter_events(one_gene_events: list[GeneEvent], percentile_cutoff: int,
 
 @njit
 def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> int:
+    """Estimate an upper bound index for searching a gene region.
+
+    Args:
+        start_idx: Start event index in events.
+        events: Sorted candidate events.
+        preds: Model prediction matrix.
+
+    Returns:
+        End index delimiting the candidate search window.
+    """
     event = events[start_idx]
     start_pos = event.pos
     pos = start_pos
@@ -154,6 +190,14 @@ def get_end_idx(start_idx: int, events: list[GeneEvent], preds: np.ndarray) -> i
 
 @njit
 def starts_with_start_codon(seq) -> bool:
+    """Check whether a sequence starts with an accepted start codon.
+
+    Args:
+        seq: Uppercase coding sequence.
+
+    Returns:
+        True if the first codon is one of the accepted starts.
+    """
     # note: assumes seq is all uppercase
     if len(seq) < 3:
         return False
@@ -163,6 +207,14 @@ def starts_with_start_codon(seq) -> bool:
 
 @njit
 def count_stop_codons(seq) -> int:
+    """Count in-frame stop codons in a coding sequence.
+
+    Args:
+        seq: Uppercase coding sequence.
+
+    Returns:
+        Number of in-frame stop codons.
+    """
     # note: assumes seq is all uppercase
     count = 0
     for i in range(0, len(seq) - 2, 3):
@@ -174,6 +226,14 @@ def count_stop_codons(seq) -> int:
 
 @njit
 def ends_with_stop_codon(seq) -> bool:
+    """Check whether a sequence ends with a valid stop codon.
+
+    Args:
+        seq: Uppercase coding sequence.
+
+    Returns:
+        True if the terminal codon is a stop codon.
+    """
     # note: assumes seq is all uppercase
     if len(seq) < 3:
         return False
@@ -739,7 +799,18 @@ def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
 @njit
 def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, contig_id: str,
                        params: Params) -> list[tuple[int, float, list[GeneEvent]]]:
-    """ for a given set of events corresponding to a contig / candidate gene region, produce all possible gene calls"""
+    """Generate and score valid gene-call candidates for one contig region.
+
+    Args:
+        preds: Model prediction matrix.
+        events: Candidate boundary events sorted by position.
+        seq: DNA sequence for the current contig.
+        contig_id: Contig identifier used in logs.
+        params: Runtime thresholds and recursion limits.
+
+    Returns:
+        List of selected calls as (group_id, score, gene_events) tuples.
+    """
     function_start_time = python_time()
     start_time = python_time()
     num_ops = 0

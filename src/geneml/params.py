@@ -7,13 +7,25 @@ from typing import Any
 
 
 class Strand(Enum):
+    """Supported prediction strand modes."""
+
     FORWARD = "forward"
     REVERSE = "reverse"
     BOTH = "both"
 
 
 class EnhancedJSONEncoder(json.JSONEncoder):
+    """JSON encoder that supports enums and namedtuples."""
+
     def default(self, obj) -> Any:
+        """Serialize enums and namedtuples to JSON-compatible objects.
+
+        Args:
+            obj: Object to serialize.
+
+        Returns:
+            JSON-serializable representation of obj.
+        """
         if isinstance(obj, Enum):
             return obj.value
         if hasattr(obj, "_asdict"):  # for namedtuples
@@ -32,19 +44,46 @@ class Params(namedtuple('Params', (
     'min_exon_size', 'max_exon_size', 'dynamic_scoring',
     'cpu_only',
 ))):
+    """Immutable runtime parameter container used throughout geneML."""
+
     def to_json(self, **kwargs) -> str:
+        """Serialize parameters to JSON.
+
+        Args:
+            **kwargs: Extra arguments passed to json.dumps.
+
+        Returns:
+            JSON string representation of the parameters.
+        """
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
 
 
 def get_basepath(inpath, outpath) -> str:
+    """Resolve the base output path without extension.
+
+    Args:
+        inpath: Input sequence path.
+        outpath: Optional explicit output path.
+
+    Returns:
+        Output base path without file extension.
+    """
     if outpath:
         return os.path.splitext(outpath)[0]
     return os.path.splitext(inpath)[0]
 
 
 def build_params_namedtuple(args: Namespace) -> Params:
-    """
-    numba can't handle Namespace, or a dictionary of mixed typed values, but it can handle a namedtuple.
+    """Convert parsed CLI args to a Params namedtuple.
+
+    numba cannot handle argparse Namespace or mixed-type dictionaries, but it can
+    handle a namedtuple with stable field order.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Params instance used by downstream prediction code.
     """
     basepath = get_basepath(args.sequence, args.output)
 

@@ -73,8 +73,19 @@ def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[s
 
 
 def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
-    """
-    Returns a python-only data structure so it can be pickled for either joblib or crossing over process boundaries
+    """Process one contig and return transcript predictions or raw score segments.
+
+    Returns only Python-native structures so the result is safely picklable
+    across process boundaries.
+
+    Args:
+        contig_id: Contig identifier.
+        seq: Contig DNA sequence.
+        params: Runtime parameters controlling prediction behavior.
+        tensorflow_thread_count: Optional thread count for TensorFlow ops.
+
+    Returns:
+        Tuple of contig ID, transcript list, and optional SEG-formatted scores.
     """
     start_time = time.time()
 
@@ -119,8 +130,14 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
 
 
 def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
-    """
-    Reorders contigs by size to balance the workload across processes.
+    """Reorder contigs to better balance parallel work.
+
+    Args:
+        contigs: Mapping of contig IDs to sequences.
+        num_cores: Number of worker processes.
+
+    Returns:
+        Ordered list of (contig_id, sequence) tuples.
     """
     contigs_by_size = sorted(contigs.items(), key=lambda x: len(x[1]), reverse=False)
     if len(contigs_by_size) < num_cores * 2:
@@ -138,6 +155,14 @@ def reorder_contigs(contigs, num_cores) -> list[tuple[str, str]]:
 
 
 def process_genome(params: Params) -> None:
+    """Run the end-to-end prediction pipeline for one input genome.
+
+    Args:
+        params: Runtime parameters controlling model execution and outputs.
+
+    Returns:
+        None.
+    """
     num_cores = params.num_cores
     genome_start_time = time.time()
 
@@ -224,6 +249,14 @@ def process_genome(params: Params) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments, configure logging, and run genome processing.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
     args = parse_args()
     params = build_params_namedtuple(args)
 
