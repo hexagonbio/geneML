@@ -17,13 +17,26 @@ from geneml.types import Gene
 
 
 def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -> list[tuple]:
+    """Build GFF rows for one gene and all associated transcript features.
+
+    Args:
+        contig_id: Contig identifier.
+        gene: Gene object containing transcripts and exon structures.
+        source: Value for the GFF source column.
+        offset: Coordinate offset applied to all generated features.
+
+    Returns:
+        List of tuples representing GFF columns.
+    """
     gff_rows = []
     gene_id = gene.gene_id
     strand = '+' if gene.strand == 1 else '-'
 
     def get_start_coordinate(start_value, offset=offset):
+        """Convert zero-based start to one-based inclusive GFF coordinate."""
         return offset + start_value + 1     # GFF is 1-based
     def get_end_coordinate(end_value, offset=offset):
+        """Convert zero-based exclusive end to one-based inclusive GFF coordinate."""
         return offset + end_value
 
     # seqname, source, feature, start, end, score, strand, frame, attributes
@@ -87,6 +100,16 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
 
 
 def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str) -> None:
+    """Write predicted genes and transcripts to a GFF3 file.
+
+    Args:
+        contigs: Mapping from contig IDs to sequences.
+        results: Mapping from contig IDs to predicted genes.
+        outpath: Output file path.
+
+    Returns:
+        None.
+    """
     gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
@@ -111,6 +134,15 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outp
 
 def build_cds_sequences(contigs: dict[str, str], results: dict[str, list[Gene]]
                         ) -> dict[str, str]:
+    """Construct CDS nucleotide sequences for all predicted transcripts.
+
+    Args:
+        contigs: Mapping from contig IDs to sequences.
+        results: Mapping from contig IDs to predicted genes.
+
+    Returns:
+        Mapping from transcript IDs to CDS sequences.
+    """
     cdses_by_transcript = {}
     for contig_id, genes in results.items():
         if not genes:
@@ -135,6 +167,16 @@ def build_cds_sequences(contigs: dict[str, str], results: dict[str, list[Gene]]
 
 
 def write_fasta(cdses_by_transcript: dict[str, str], path: str, sequence_type: str) -> None:
+    """Write CDS or translated protein sequences in FASTA format.
+
+    Args:
+        cdses_by_transcript: Mapping from transcript IDs to CDS sequences.
+        path: Output FASTA path.
+        sequence_type: Either 'cds' or 'protein'.
+
+    Returns:
+        None.
+    """
     if sequence_type == 'cds':
         to_write = cdses_by_transcript
     elif sequence_type == 'protein':
@@ -149,6 +191,16 @@ def write_fasta(cdses_by_transcript: dict[str, str], path: str, sequence_type: s
 
 @njit
 def build_prediction_scores_seg(contig_id: str, preds: np.ndarray, rc_preds: np.ndarray) -> str:
+    """Build SEG-format score tracks from forward and reverse strand predictions.
+
+    Args:
+        contig_id: Contig identifier.
+        preds: Forward-strand model scores.
+        rc_preds: Reverse-strand model scores.
+
+    Returns:
+        SEG-formatted text with score intervals.
+    """
     num_bases: int = preds.shape[1]
     assert preds.shape == rc_preds.shape, f'preds shape {preds.shape} != rc_preds shape {rc_preds.shape}'
     lines = typed.List.empty_list(types.unicode_type)

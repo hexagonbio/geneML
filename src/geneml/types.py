@@ -18,6 +18,8 @@ GeneCallNumbaType = typeof(typed.List.empty_list(GeneEventNumbaType))
 
 
 class TranscriptVariant(Enum):
+    """Classification labels describing transcript isoform relationships."""
+
     UNKNOWN = 0
     PRIMARY = 1
     INTRON_RETENTION = 2
@@ -31,6 +33,8 @@ class TranscriptVariant(Enum):
 
 @dataclass
 class Exon:
+    """Coding exon with genomic bounds, defining events, and score metadata."""
+
     start: int
     end: int
     events: tuple[GeneEvent, ...]
@@ -38,12 +42,15 @@ class Exon:
     phase: int
 
 def __post_init__(self) -> None:
+    """Validate that each exon has exactly one start and one end event."""
     if not self.events or len(self.events) != 2:
         raise ValueError('An exon must have exactly two gene events (start and end).')
 
 
 @dataclass
 class Transcript:
+    """Transcript model containing ordered exons and variant metadata."""
+
     start: int
     end: int
     strand: int
@@ -55,6 +62,7 @@ class Transcript:
     transcript_variant: TranscriptVariant = TranscriptVariant.UNKNOWN
 
     def __post_init__(self) -> None:
+        """Validate transcript exon content and coordinate consistency."""
         if not self.exons:
             raise ValueError('A transcript must have at least one exon.')
 
@@ -64,12 +72,36 @@ class Transcript:
                                  f'is out of transcript bounds ({self.start}, {self.end}).')
 
     def set_transcript_id(self, transcript_id: str) -> None:
+        """Assign a stable transcript identifier.
+
+        Args:
+            transcript_id: Identifier to assign.
+
+        Returns:
+            None.
+        """
         self.transcript_id = transcript_id
 
     def set_transcript_variant(self, transcript_variant: TranscriptVariant) -> None:
+        """Assign transcript variant classification.
+
+        Args:
+            transcript_variant: Variant label to assign.
+
+        Returns:
+            None.
+        """
         self.transcript_variant = transcript_variant
 
     def classify_transcript_variant(self, primary_transcript: 'Transcript') -> TranscriptVariant:
+        """Classify this transcript relative to the primary isoform.
+
+        Args:
+            primary_transcript: Primary transcript used as reference.
+
+        Returns:
+            Transcript variant label for this transcript.
+        """
         assert primary_transcript.transcript_variant == TranscriptVariant.PRIMARY
 
         if self.exons == primary_transcript.exons:
@@ -79,6 +111,15 @@ class Transcript:
         return get_alternative_transcript_variant(primary_transcript, self)
 
     def overlaps_with(self, other: 'Transcript', ignore_strand: bool = False) -> bool:
+        """Check whether two transcript intervals overlap.
+
+        Args:
+            other: Transcript to compare against.
+            ignore_strand: Whether strand must match.
+
+        Returns:
+            True when intervals overlap under the chosen strand rule.
+        """
         # by default only consider overlaps on the same strand
         if not ignore_strand and self.strand != other.strand:
             return False
@@ -87,6 +128,8 @@ class Transcript:
 
 @dataclass
 class Gene:
+    """Gene model containing transcript isoforms and locus coordinates."""
+
     gene_id: str
     start: int
     end: int
@@ -95,6 +138,7 @@ class Gene:
     score: float
 
     def __post_init__(self) -> None:
+        """Validate transcripts and assign IDs and variant labels."""
         if not self.transcripts:
             raise ValueError('A gene must have at least one transcript.')
 

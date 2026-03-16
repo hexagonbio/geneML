@@ -169,6 +169,14 @@ def check_args(parser, args) -> None:
 
 
 def parse_args(argv=None) -> Namespace:
+    """Parse and validate command-line arguments for geneML.
+
+    Args:
+        argv: Optional argument list. If None, arguments are read from sys.argv.
+
+    Returns:
+        Parsed and validated CLI arguments.
+    """
     version_string = f"geneML {__version__}"
     parser = argparse.ArgumentParser(description=version_string, add_help=False)
 

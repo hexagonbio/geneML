@@ -7,8 +7,14 @@ logger = logging.getLogger("geneml")
 
 
 def compute_optimal_num_parallelism(num_contigs) -> tuple[int, int | None]:
-    """As the amount of memory increases, we can be more aggressive with the number of parallel processes since
-    there is a larger shared buffer to handle memory spikes within a given subprocess/contig."""
+    """Estimate process and TensorFlow thread counts from available memory.
+
+    Args:
+        num_contigs: Number of contigs that will be processed.
+
+    Returns:
+        A tuple of (num_processes, tensorflow_thread_count).
+    """
     gb_available = psutil.virtual_memory().available / (1024 * 1024 * 1024)
 
     if gb_available < 8:
