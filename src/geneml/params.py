@@ -57,14 +57,11 @@ class Params(namedtuple('Params', (
         """
         return json.dumps(self._asdict(), cls=EnhancedJSONEncoder, **kwargs)
 
-    def to_log_json(self, **kwargs) -> str:
-        """Serialize parameters to grouped JSON for log output.
-
-        Args:
-            **kwargs: Extra arguments passed to json.dumps.
+    def to_log_ini(self) -> str:
+        """Serialize parameters to grouped INI-style text for log output.
 
         Returns:
-            JSON string representation grouped by parameter category.
+            INI-style string with parameters grouped by category.
         """
         grouped_params = {
             'paths': {
@@ -80,9 +77,7 @@ class Params(namedtuple('Params', (
             'gene_calling': {
                 'strand': self.strand,
                 'max_transcripts': self.max_transcripts,
-                'allow_opposite_strand_overlaps': (
-                    self.allow_opposite_strand_overlaps
-                ),
+                'allow_opposite_strand_overlaps': self.allow_opposite_strand_overlaps,
                 'gene_candidates': self.gene_candidates,
             },
             'thresholds': {
@@ -115,7 +110,15 @@ class Params(namedtuple('Params', (
                 'recurse_region_max_num_ops': self.recurse_region_max_num_ops,
             },
         }
-        return json.dumps(grouped_params, cls=EnhancedJSONEncoder, **kwargs)
+        lines = []
+        for section, fields in grouped_params.items():
+            lines.append(f'[{section}]')
+            for key, value in fields.items():
+                if isinstance(value, Enum):
+                    value = value.value
+                lines.append(f'  {key} = {value}')
+            lines.append('')
+        return '\n'.join(lines)
 
 
 def get_basepath(inpath, outpath) -> str:

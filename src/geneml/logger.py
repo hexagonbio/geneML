@@ -71,5 +71,4 @@ def write_setup_info(params) -> None:
     """
     logger.info("Running geneML version %s", __version__)
     logger.info("Command line: %s", " ".join(sys.argv[1:]))
-    parameter_info = '\n'.join(["Parameters:", params.to_log_json(indent=2)])
-    logger.info(parameter_info)
+    logger.info("Parameters:\n%s", params.to_log_ini())
