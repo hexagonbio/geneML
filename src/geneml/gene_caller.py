@@ -541,15 +541,13 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
     """Select best gene calls from a group of overlapping candidates.
 
     Filters a group of overlapping gene candidates to retain the most promising
-    isoforms based on quality score and start position. Prioritizes keeping the longest
-    gene among high-scoring candidates, plus alternatives with similar or better event scores.
-    The first candidate returned is considered the primary isoform.
+    isoforms based on quality score and start position.
 
     Selection strategy:
-    1. Initial candidate is the highest scoring call among calls with the most upstream start
-    2. Sort remaining candidates by score (descending)
-    3. Keep valid alternatives up to min(5, max_transcripts) total
-    4. Sort kept candidates by CDS length and return up to max_transcripts
+    1. Seed with earliest-start candidate with highest score
+    2. Build a provisional set of valid alternatives against the seed (score-prioritized)
+    3. Define final primary as the longest transcript in the provisional set
+    4. Re-validate alternatives against final primary (only if primary differs from seed)
 
     Args:
         group: List of (score, gene_call) tuples for overlapping gene candidates
@@ -560,27 +558,38 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
     """
     initial_max_transcripts = min(5, max_transcripts)
 
-    keep = [group[0]]
+    seed = group[0]
+    keep = [seed]
 
     # Sort remaining candidates by score.
     candidates = group[1:]
     candidates.sort(key=lambda x: x[0], reverse=True)
 
-    # Also keep alternatives with similar or higher event scores
+    # Stage 1: build a provisional set against the seed.
     for candidate in candidates:
-        # Compare to all selected candidates
-        valid = True
-        for ref in keep:
-            if not is_valid_alternative(ref[1], candidate[1]):
-                valid = False
-                break
-        if valid:
+        if is_valid_alternative(seed[1], candidate[1]):
             keep.append(candidate)
         if len(keep) == initial_max_transcripts:
             break
 
-    keep.sort(key=lambda x: compute_cds_length(x[1]), reverse=True) # sort by CDS length
-    selected = keep[:max_transcripts] # enforce max_transcripts limit
+    # Final primary is longest transcript among selected
+    keep.sort(key=lambda x: compute_cds_length(x[1]), reverse=True)
+    primary = keep[0]
+
+    if primary == seed:
+        selected = keep[:max_transcripts]
+    else:
+        # Stage 2: If primary changed, re-validate all alternatives
+        selected = [primary]
+        for candidate in keep:
+            if candidate == primary:
+                continue
+            overlaps_primary = candidate[1][0].pos <= primary[1][-1].pos and \
+                               candidate[1][-1].pos >= primary[1][0].pos
+            if overlaps_primary and is_valid_alternative(primary[1], candidate[1]):
+                selected.append(candidate)
+            if len(selected) == max_transcripts:
+                break
 
     return selected
 
