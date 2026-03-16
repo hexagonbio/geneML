@@ -596,10 +596,10 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
 
 @njit
 def split_into_genes(group: list[tuple[float, list[GeneEvent]]]) -> list:
-    """Split overlapping gene calls into gene groups anchored by primary transcripts.
+    """Split overlapping gene calls into gene groups.
 
-    Uses primary transcripts (selected by start position and score) as anchors to define
-    gene loci boundaries. Candidates starting before an anchor's end are grouped together,
+    Uses anchor transcripts (selected by start position and score) to define gene loci boundaries.
+    Candidates starting before an anchor's end are grouped together,
     while candidates starting after initiate a new group. Transcripts overlapping multiple
     anchors are assigned to the first group.
 
