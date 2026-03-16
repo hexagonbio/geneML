@@ -17,20 +17,20 @@ class Strand(Enum):
 class EnhancedJSONEncoder(json.JSONEncoder):
     """JSON encoder that supports enums and namedtuples."""
 
-    def default(self, obj) -> Any:
+    def default(self, o) -> Any:
         """Serialize enums and namedtuples to JSON-compatible objects.
 
         Args:
-            obj: Object to serialize.
+            o: Object to serialize.
 
         Returns:
-            JSON-serializable representation of obj.
+            JSON-serializable representation of o.
         """
-        if isinstance(obj, Enum):
-            return obj.value
-        if hasattr(obj, "_asdict"):  # for namedtuples
-            return obj._asdict()
-        return super().default(obj)
+        if isinstance(o, Enum):
+            return o.value
+        if hasattr(o, "_asdict"):  # for namedtuples
+            return o._asdict()
+        return super().default(o)
 
 
 class Params(namedtuple('Params', (
