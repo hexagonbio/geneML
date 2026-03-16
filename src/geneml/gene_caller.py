@@ -537,7 +537,7 @@ def compute_cds_length(gene_call: list[GeneEvent]) -> int:
 
 @njit
 def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_transcripts: int,
-                                top_score_margin: float) -> list[tuple[float, list[GeneEvent]]]:
+                                    ) -> list[tuple[float, list[GeneEvent]]]:
     """Select best gene calls from a group of overlapping candidates.
 
     Filters a group of overlapping gene candidates to retain the most promising
@@ -546,41 +546,28 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
     The first candidate returned is considered the primary isoform.
 
     Selection strategy:
-    1. Identify best-scoring candidates (within a score threshold of top score)
-    2. Among best scorers, select the highest-scoring candidate with the lowest start position
-    3. Collect valid alternatives to the initial candidate, up to min(5, max_transcripts) total
-    4. Sort collected candidates by CDS length
-    5. Return up to max_transcripts candidates
+    1. Initial candidate is the highest scoring call among calls with the most upstream start
+    2. Sort remaining candidates by score (descending)
+    3. Keep valid alternatives up to min(5, max_transcripts) total
+    4. Sort kept candidates by CDS length and return up to max_transcripts
 
     Args:
         group: List of (score, gene_call) tuples for overlapping gene candidates
         max_transcripts: Maximum number of alternative transcripts to retain
-        top_score_margin: Score margin threshold for selecting best candidates
 
     Returns:
         List of (score, gene_call) tuples for selected gene calls, sorted by CDS length
     """
     initial_max_transcripts = min(5, max_transcripts)
 
-    group.sort(key=lambda x: x[0], reverse=True) # sort by score
-    best_score = group[0][0]
-    best_candidates = [item for item in group if best_score - item[0] <= top_score_margin]
+    keep = [group[0]]
 
-    # Find candidate with lowest start position (highest score if tied on position)
-    top_idx = 0
-    for i in range(1, len(best_candidates)):
-        if best_candidates[i][1][0].pos < best_candidates[top_idx][1][0].pos:
-            top_idx = i
-        elif best_candidates[i][1][0].pos == best_candidates[top_idx][1][0].pos \
-             and best_candidates[i][0] > best_candidates[top_idx][0]:
-            top_idx = i
-
-    keep = [best_candidates[top_idx]]
+    # Sort remaining candidates by score.
+    candidates = group[1:]
+    candidates.sort(key=lambda x: x[0], reverse=True)
 
     # Also keep alternatives with similar or higher event scores
-    for i, candidate in enumerate(best_candidates):
-        if i == top_idx:
-            continue
+    for candidate in candidates:
         # Compare to all selected candidates
         valid = True
         for ref in keep:
@@ -599,19 +586,16 @@ def select_gene_calls_per_group(group: list[tuple[float, list[GeneEvent]]], max_
 
 
 @njit
-def split_into_genes(group: list[tuple[float, list[GeneEvent]]],
-                     top_score_margin: float) -> list:
+def split_into_genes(group: list[tuple[float, list[GeneEvent]]]) -> list:
     """Split overlapping gene calls into gene groups anchored by primary transcripts.
 
     Uses primary transcripts (selected by start position and score) as anchors to define
     gene loci boundaries. Candidates starting before an anchor's end are grouped together,
-    while candidates starting after initiate a new group. If a candidate scores higher than
-    an anchor by top_score_margin, it replaces the anchor. Transcripts overlapping multiple
+    while candidates starting after initiate a new group. Transcripts overlapping multiple
     anchors are assigned to the first group.
 
     Args:
         group: Sorted list of (score, gene_call) tuples, where gene_call is a list of GeneEvents
-        top_score_margin: Score margin threshold for selecting best candidates
 
     Returns:
         List of gene groups, where each group is a list of (score, gene_call) tuples
@@ -627,32 +611,60 @@ def split_into_genes(group: list[tuple[float, list[GeneEvent]]],
             gene_groups.append(gene_group)
             gene_group = [candidate]
         else:
-            if candidate[0] > gene_group[0][0] + top_score_margin:
-                gene_group[0] = candidate  # Update anchor if its score is insufficient
-            else:
-                gene_group.append(candidate)
+            gene_group.append(candidate)
     gene_groups.append(gene_group)
 
     return gene_groups
 
 
 @njit
+def select_by_margin(group: list[tuple[float, list[GeneEvent]]], score_margin: float
+                     ) -> list[tuple[float, list[GeneEvent]]]:
+    """Select candidates within a score margin of the top candidate.
+
+    Args:
+        group: List of (score, gene_call) tuples for a set of candidates
+        score_margin: Score margin threshold for selection
+
+    Returns:
+        List of (score, gene_call) tuples for candidates within the score margin of the top
+        candidate.
+        """
+    best_score = group[0][0]
+    for i in range(1, len(group)):
+        if group[i][0] > best_score:
+            best_score = group[i][0]
+
+    filtered = typed.List.empty_list(ScoredGeneCallType)
+    for item in group:
+        if best_score - item[0] <= score_margin:
+            filtered.append(item)
+
+    return filtered
+
+
+@njit
 def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
-                      min_score: float, max_transcripts: int, top_score_margin: float = 0.2
+                      min_score: float, max_transcripts: int,
+                      score_margin_loose: float, score_margin_strict: float,
                       ) -> list[tuple[int, float, list[GeneEvent]]]:
     """Select best gene calls from candidates, supporting alternative transcripts.
 
-    Filters candidate gene calls based on minimum score.
-    Groups overlapping gene calls and selects the most promising candidates from each
-    group based on a combination of score and start position. Designed to retain both
-    the longest isoform and valid alternative transcripts.
+    Filters candidate gene calls based on minimum score, then applies two-stage
+    score filtering and locus splitting:
+    1. Build overlap groups by genomic interval overlap
+    2. Apply loose score-margin filtering per overlap group
+    3. Split into locus groups
+    4. Apply strict score-margin filtering per locus group
+    5. Select primary and alternative transcripts per locus group
 
     Args:
         preds: Model predictions array with shape (num_features, sequence_length)
         gene_calls: List of candidate gene structures, each as a list of GeneEvents
         min_score: Minimum quality score threshold
         max_transcripts: Maximum number of alternative transcripts to retain per gene locus
-        top_score_margin: Score margin threshold for selecting best candidates
+        score_margin_loose: Loose score margin threshold applied at overlapping group level
+        score_margin_strict: Strict score margin threshold applied at locus level
 
     Returns:
         List of (group_id, score, gene_call) tuples for selected gene calls.
@@ -680,10 +692,11 @@ def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
         else:
             # Process completed group
             if len(group) > 1:
-                gene_groups = split_into_genes(group, top_score_margin)
+                group = select_by_margin(group, score_margin_loose)
+                gene_groups = split_into_genes(group)
                 for gene_group in gene_groups:
-                    best_calls = select_gene_calls_per_group(gene_group, max_transcripts,
-                                                             top_score_margin)
+                    gene_group = select_by_margin(gene_group, score_margin_strict)
+                    best_calls = select_gene_calls_per_group(gene_group, max_transcripts)
                     # Add group_id to each call - unpack the tuple to use its score
                     for call_score, call in best_calls:
                         selected.append((group_id, call_score, call))
@@ -698,10 +711,11 @@ def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
     # Process final group
     if group:
         if len(group) > 1:
-            gene_groups = split_into_genes(group, top_score_margin)
+            group = select_by_margin(group, score_margin_loose)
+            gene_groups = split_into_genes(group)
             for gene_group in gene_groups:
-                best_calls = select_gene_calls_per_group(gene_group, max_transcripts,
-                                                         top_score_margin)
+                gene_group = select_by_margin(gene_group, score_margin_strict)
+                best_calls = select_gene_calls_per_group(gene_group, max_transcripts)
                 # Add group_id to each call - unpack the tuple to use its score
                 for call_score, call in best_calls:
                     selected.append((group_id, call_score, call))
@@ -815,5 +829,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
         else:
             min_score = params.min_gene_score
         all_best_scores = select_gene_calls(preds, all_gene_calls, min_score,
-                                            params.max_transcripts)
+                                            params.max_transcripts,
+                                            score_margin_loose=0.4, score_margin_strict=0.2)
     return all_best_scores
