@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from geneml import __version__
 from geneml.params import Strand
@@ -53,7 +54,108 @@ def gene_score(value) -> str | float:
             ) from e
 
 
-def check_args(parser, args):
+def get_basepath(inpath: str, outpath: str | None) -> str:
+    """Resolve the base output path without extension.
+
+    Args:
+        inpath: Input sequence path.
+        outpath: Optional explicit output path.
+
+    Returns:
+        Output base path without file extension.
+    """
+    if outpath:
+        return os.path.splitext(outpath)[0]
+    return os.path.splitext(inpath)[0]
+
+
+def check_input_path(parser, path: str, label: str) -> None:
+    """Validate that an input path exists and is readable.
+
+    Args:
+        parser: Argument parser used to report validation errors.
+        path: Path to validate.
+        label: Human-readable argument label for error messages.
+
+    Returns:
+        None.
+    """
+    if not os.path.exists(path):
+        parser.error(f"{label} does not exist: {path}")
+    if not os.path.isfile(path):
+        parser.error(f"{label} is not a file: {path}")
+    if not os.access(path, os.R_OK):
+        parser.error(f"{label} is not readable: {path}")
+
+
+def check_output_path(parser, path: str, label: str) -> None:
+    """Validate that an output path can be written.
+
+    Args:
+        parser: Argument parser used to report validation errors.
+        path: Path to validate.
+        label: Human-readable argument label for error messages.
+
+    Returns:
+        None.
+    """
+    if os.path.isdir(path):
+        parser.error(f"{label} points to a directory, not a file: {path}")
+
+    parent_dir = os.path.dirname(os.path.abspath(path)) or os.curdir
+    if not os.path.exists(parent_dir):
+        parser.error(f"Parent directory for {label} does not exist: {parent_dir}")
+    if not os.path.isdir(parent_dir):
+        parser.error(f"Parent path for {label} is not a directory: {parent_dir}")
+
+    if os.path.exists(path):
+        if not os.path.isfile(path):
+            parser.error(f"{label} is not a regular file: {path}")
+        if not os.access(path, os.W_OK):
+            parser.error(f"{label} is not writable: {path}")
+    elif not os.access(parent_dir, os.W_OK):
+        parser.error(f"Parent directory for {label} is not writable: {parent_dir}")
+
+
+def check_paths(parser, args) -> None:
+    """Validate input, output, and log file paths.
+
+    Args:
+        parser: Argument parser used to report validation errors.
+        args: Parsed CLI arguments namespace.
+
+    Returns:
+        None.
+    """
+    basepath = get_basepath(args.sequence, args.output)
+
+    check_input_path(parser, args.sequence, "sequence path")
+    if args.model:
+        check_input_path(parser, args.model, "--model")
+
+    check_output_path(
+        parser,
+        args.output if args.output else ''.join([basepath, '.gff3']),
+        "annotation output path",
+    )
+    check_output_path(parser, ''.join([basepath, '.log']), "log output path")
+
+    if args.genes:
+        check_output_path(parser, args.genes, "--genes")
+    if args.proteins:
+        check_output_path(parser, args.proteins, "--proteins")
+
+
+def check_args(parser, args) -> None:
+    """Validate combinations of parsed CLI arguments and check file paths.
+
+    Args:
+        parser: Argument parser used to report validation errors.
+        args: Parsed CLI arguments namespace.
+
+    Returns:
+        None.
+    """
     if args.model and not args.context_length:
         parser.error("--context-length is required when using a custom model.")
     if args.min_exon_size > args.max_exon_size:
@@ -62,6 +164,7 @@ def check_args(parser, args):
     if args.min_intron_size > args.max_intron_size:
         parser.error(f"--min-intron-size ({args.min_intron_size}) cannot exceed "
                      f"--max-intron-size ({args.max_intron_size}).")
+    check_paths(parser, args)
 
 
 def parse_args(argv=None):
