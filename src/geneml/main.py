@@ -223,7 +223,8 @@ def process_genome(params: Params) -> None:
         logger.info('Filtering gene calls by dynamic threshold')
         transcripts_by_contig_id = filter_by_dynamic_threshold(transcripts_by_contig_id,
                                                                params.min_gene_score)
-    genes_by_contig_id, mean_gene_score = assign_transcripts_to_genes(transcripts_by_contig_id)
+    genes_by_contig_id, mean_gene_score = assign_transcripts_to_genes(transcripts_by_contig_id,
+                                                                      params.gene_id_prefix)
 
     if all_segs:
         logger.info('Writing raw scores to %s', params.basepath+'.seg')

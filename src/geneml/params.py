@@ -42,7 +42,7 @@ class Params(namedtuple('Params', (
     'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
     'max_transcripts', 'allow_opposite_strand_overlaps',
     'min_exon_size', 'max_exon_size', 'dynamic_scoring',
-    'cpu_only',
+    'cpu_only', 'gene_id_prefix',
 ))):
     """Immutable runtime parameter container used throughout geneML."""
 
@@ -96,6 +96,7 @@ class Params(namedtuple('Params', (
                 'output_segs': self.output_segs,
                 'output_genes': self.output_genes,
                 'output_proteins': self.output_proteins,
+                'gene_id_prefix': self.gene_id_prefix,
             },
             'runtime': {
                 'num_cores': self.num_cores,
@@ -173,6 +174,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'output_segs': args.write_raw_scores,
         'output_genes': args.genes,
         'output_proteins': args.proteins,
+        'gene_id_prefix': args.gene_id_prefix,
 
         'num_cores': args.cores,
         'debug': args.debug,
