@@ -314,8 +314,10 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
 
     Groups transcripts into gene loci based on the group_id assigned during gene calling.
     Transcripts sharing the same contig, strand, and group_id are considered alternative
-    isoforms of the same gene. Each gene is assigned a unique sequential identifier in
-    the format 'GML######'.
+    isoforms of the same gene. Within each provisional locus, transcripts are sorted so the
+    primary transcript is first (longest CDS, then highest score), and transcripts that do not
+    overlap the current primary are split into separate loci. Each gene is assigned a unique
+    sequential identifier in the format 'GML######'.
 
     Args:
         transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
@@ -327,6 +329,10 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
     genes_by_contig = defaultdict(list)
     gene_count = 0
     transcript_count = 0
+
+    def cds_length(transcript: Transcript) -> int:
+        """Return CDS length in nucleotides for one transcript."""
+        return sum(exon.end - exon.start for exon in transcript.exons)
 
     for contig_id, transcripts in transcripts_by_contig_id.items():
         if not transcripts:
@@ -340,24 +346,45 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
             key = (t.strand, t.group_id)
             gene_groups[key].append(t)
 
-        # Sort groups by start position
-        sorted_groups = sorted(gene_groups.items(), key=lambda x: x[1][0].start)
+        # Sort groups by genomic start position
+        sorted_groups = sorted(gene_groups.items(), key=lambda x: min(t.start for t in x[1]))
 
         # Create Gene objects
         for _, group in sorted_groups:
-            gene_count += 1
-            if gene_count == 1_000_000:
-                logger.warning('Reached 1 million predicted genes, '
-                               'will produce gene IDs with more than 6 digits.')
-            gene = Gene(
-                gene_id=f'GML{gene_count:06d}',
-                start=min(t.start for t in group),
-                end=max(t.end for t in group),
-                strand=group[0].strand,
-                transcripts=tuple(group),
-                score=max(t.score for t in group),
-            )
-            genes_by_contig[contig_id].append(gene)
+            # Ensure primary is first by sorting transcripts by CDS length (desc),
+            # then by score (desc), then genomic coordinates for stable tie-breaking.
+            ordered_group = sorted(group, key=lambda t: (-cds_length(t), -t.score, t.start, t.end))
+
+            # If transcripts within one (strand, group_id) do not overlap with the
+            # locus primary, split them into separate loci.
+            split_loci: list[list[Transcript]] = []
+            for transcript in ordered_group:
+                assigned = False
+                for locus in split_loci:
+                    primary = locus[0]
+                    if transcript.overlaps_with(primary):
+                        locus.append(transcript)
+                        assigned = True
+                        break
+                if not assigned:
+                    split_loci.append([transcript])
+
+            split_loci.sort(key=lambda locus: min(t.start for t in locus))
+
+            for locus in split_loci:
+                gene_count += 1
+                if gene_count == 1_000_000:
+                    logger.warning('Reached 1 million predicted genes, '
+                                   'will produce gene IDs with more than 6 digits.')
+                gene = Gene(
+                    gene_id=f'GML{gene_count:06d}',
+                    start=min(t.start for t in locus),
+                    end=max(t.end for t in locus),
+                    strand=locus[0].strand,
+                    transcripts=tuple(locus),
+                    score=max(t.score for t in locus),
+                )
+                genes_by_contig[contig_id].append(gene)
 
     logger.info('Total predicted transcripts: %d', transcript_count)
     logger.info('Total predicted genes: %d (%.2f transcripts per gene)',
