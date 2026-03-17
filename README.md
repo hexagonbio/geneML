@@ -84,7 +84,7 @@ The directive ##geneml-mean-gene-score (found at the top of the GFF file) stores
 ## Full Usage
 ```
 geneml --help
-usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS] [-m MODEL] [-cl CONTEXT_LENGTH] [-c CORES] [-v] [-d]
+usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS] [--gene-id-prefix GENE_ID_PREFIX] [-m MODEL] [-cl CONTEXT_LENGTH] [-c CORES] [-v] [-d]
               [--cpu-only] [--strand {forward,reverse,both}] [--contigs-filter CONTIGS_FILTER] [--write-raw-scores]
               [--max-transcripts MAX_TRANSCRIPTS] [--allow-opposite-strand-overlaps {true,false}] [--min-gene-score MIN_GENE_SCORE]
               [--min-exon-size MIN_EXON_SIZE] [--max-exon-size MAX_EXON_SIZE] [--min-intron-size MIN_INTRON_SIZE]
@@ -93,7 +93,7 @@ usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS] [-m MODEL] [
               [--exon-end-min-score EXON_END_MIN_SCORE] [--gene-candidates GENE_CANDIDATES]
               sequence
 
-geneML 0.3.0
+geneML 0.5.0
 
 positional arguments:
   sequence              Sequence file in FASTA/GenBank/EMBL format.
@@ -107,6 +107,8 @@ options:
                         Gene sequences output path (default: None).
   -p PROTEINS, --proteins PROTEINS
                         Protein sequences output path (default: None).
+  --gene-id-prefix GENE_ID_PREFIX
+                        Prefix for gene IDs in output (default: None).
   -m MODEL, --model MODEL
                         Path to model file (default: models/geneML_default.keras).
   -cl CONTEXT_LENGTH, --context-length CONTEXT_LENGTH
