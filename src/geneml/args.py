@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from argparse import Namespace
 
 from geneml import __version__
@@ -53,6 +54,24 @@ def gene_score(value) -> str | float:
         raise argparse.ArgumentTypeError(
             f"Must be a float between 0 and 1, or 'dynamic', got {value}."
             ) from e
+
+
+def gene_id_prefix(value: str) -> str:
+    """Validate a gene ID prefix for output identifiers.
+
+    Args:
+        value: Prefix value to validate.
+
+    Returns:
+        The validated prefix.
+    """
+    if not value:
+        raise argparse.ArgumentTypeError("Gene ID prefix must not be empty.")
+    if re.fullmatch(r'[A-Za-z0-9_.-]+', value) is None:
+        raise argparse.ArgumentTypeError(
+            "Gene ID prefix may contain only letters, digits, '.', '_', and '-'."
+        )
+    return value
 
 
 def get_basepath(inpath: str, outpath: str | None) -> str:
@@ -199,6 +218,9 @@ def parse_args(argv=None) -> Namespace:
     parser.add_argument('-p', '--proteins',
                         type=str,
                         help="Protein sequences output path (default: None).")
+    parser.add_argument('--gene-id-prefix',
+                    type=gene_id_prefix,
+                    help=("Prefix for gene IDs in output (default: None)."))
     parser.add_argument('-m', '--model',
                         type=str,
                         help="Path to model file (default: models/geneML_default.keras).")

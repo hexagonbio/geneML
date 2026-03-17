@@ -356,8 +356,8 @@ def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcr
     return filtered_transcripts_by_contig_id
 
 
-def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]]
-                                ) -> tuple[dict[str, list[Gene]], float | None]:
+def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]],
+                                gene_id_prefix: str | None) -> tuple[dict[str, list[Gene]], float | None]:
     """Assign transcripts to genes and generate unique gene identifiers.
 
     Groups transcripts into gene loci based on the group_id assigned during gene calling.
@@ -365,10 +365,12 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
     isoforms of the same gene. Within each provisional locus, transcripts are sorted so the
     primary transcript is first (longest CDS, then highest score), and transcripts that do not
     overlap the current primary are split into separate loci. Each gene is assigned a unique
-    sequential identifier in the format 'GML######'.
+    sequential identifier in the format 'GML######'. Optionally, a user-provided prefix can be
+    prepended to the gene ID.
 
     Args:
         transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
+        gene_id_prefix: Prefix for gene identifiers
 
     Returns:
         Tuple containing:
@@ -427,8 +429,12 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
                 if gene_count == 1_000_000:
                     logger.warning('Reached 1 million predicted genes, '
                                    'will produce gene IDs with more than 6 digits.')
+                if gene_id_prefix:
+                    gene_id = f'{gene_id_prefix}_GML{gene_count:06d}'
+                else:
+                    gene_id = f'GML{gene_count:06d}'
                 gene = Gene(
-                    gene_id=f'GML{gene_count:06d}',
+                    gene_id=gene_id,
                     start=min(t.start for t in locus),
                     end=max(t.end for t in locus),
                     strand=locus[0].strand,
