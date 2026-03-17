@@ -80,6 +80,7 @@ Each feature has a unique `ID` and, for child features, a `Parent` attribute spe
 ### Scores
 The feature score ranges between 0 and 1 and is a measure of how well the prediction aligns with the raw probabilities outputted by the geneML CNN.<br>
 A higher score indicates a higher prediction confidence.
+The directive ##geneml-mean-gene-score (found at the top of the GFF file) stores the average score of predicted genes.
 ## Full Usage
 ```
 geneml --help
