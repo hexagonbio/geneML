@@ -357,7 +357,7 @@ def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcr
 
 
 def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]]
-                                ) -> dict[str, list[Gene]]:
+                                ) -> tuple[dict[str, list[Gene]], float | None]:
     """Assign transcripts to genes and generate unique gene identifiers.
 
     Groups transcripts into gene loci based on the group_id assigned during gene calling.
@@ -371,12 +371,15 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
         transcripts_by_contig_id: Dictionary mapping contig IDs to lists of Transcript objects
 
     Returns:
-        Dictionary mapping contig IDs to lists of Gene objects, where each Gene contains
-        one or more alternative transcript isoforms
+        Tuple containing:
+        - Dictionary mapping contig IDs to lists of Gene objects, where each Gene contains
+          one or more alternative transcript isoforms
+        - Average score across all predicted genes, or None if no genes were predicted
     """
     genes_by_contig = defaultdict(list)
     gene_count = 0
     transcript_count = 0
+    gene_score_sum = 0.0
 
     def cds_length(transcript: Transcript) -> int:
         """Return CDS length in nucleotides for one transcript."""
@@ -432,9 +435,14 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
                     transcripts=tuple(locus),
                     score=max(t.score for t in locus),
                 )
+                gene_score_sum += gene.score
                 genes_by_contig[contig_id].append(gene)
 
     logger.info('Total predicted transcripts: %d', transcript_count)
     logger.info('Total predicted genes: %d (%.2f transcripts per gene)',
                 gene_count, transcript_count / gene_count if gene_count > 0 else 0)
-    return genes_by_contig
+
+    mean_gene_score = gene_score_sum / gene_count if gene_count > 0 else None
+    logger.info('Average gene score: %.3f', mean_gene_score if mean_gene_score is not None else 0.0)
+
+    return genes_by_contig, mean_gene_score

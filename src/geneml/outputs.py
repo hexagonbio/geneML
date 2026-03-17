@@ -99,13 +99,15 @@ def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -
     return gff_rows
 
 
-def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str) -> None:
+def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outpath: str,
+                   mean_gene_score: float | None = None) -> None:
     """Write predicted genes and transcripts to a GFF3 file.
 
     Args:
         contigs: Mapping from contig IDs to sequences.
         results: Mapping from contig IDs to predicted genes.
         outpath: Output file path.
+        mean_gene_score: Mean score across all genes, if available.
 
     Returns:
         None.
@@ -113,6 +115,8 @@ def write_gff_file(contigs: dict[str, str], results: dict[str, list[Gene]], outp
     gff_version = "3.1.26"
     gff_header = ' '.join(['##gff-version', gff_version])
     all_gff_rows = [(gff_header,)]
+    if mean_gene_score is not None:
+        all_gff_rows.append((f'##geneml-mean-gene-score {mean_gene_score:.3f}',))
 
     last_contig_id = None
     for contig_id, genes in results.items():

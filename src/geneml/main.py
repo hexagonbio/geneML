@@ -223,7 +223,7 @@ def process_genome(params: Params) -> None:
         logger.info('Filtering gene calls by dynamic threshold')
         transcripts_by_contig_id = filter_by_dynamic_threshold(transcripts_by_contig_id,
                                                                params.min_gene_score)
-    genes_by_contig_id = assign_transcripts_to_genes(transcripts_by_contig_id)
+    genes_by_contig_id, mean_gene_score = assign_transcripts_to_genes(transcripts_by_contig_id)
 
     if all_segs:
         logger.info('Writing raw scores to %s', params.basepath+'.seg')
@@ -233,7 +233,8 @@ def process_genome(params: Params) -> None:
                 f.write(f'{segs}\n')
     else:
         logger.info('Writing gene predictions to %s', params.outpath)
-        write_gff_file(contigs, genes_by_contig_id, params.outpath)
+        write_gff_file(contigs, genes_by_contig_id, params.outpath,
+                   mean_gene_score=mean_gene_score)
         if params.output_genes or params.output_proteins:
             cdses_by_transcript = build_cds_sequences(contigs, genes_by_contig_id)
             if params.output_genes:
