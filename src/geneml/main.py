@@ -1,16 +1,15 @@
 import gc
 import logging
+import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import enlighten
-import tensorflow as tf
 from Bio.Seq import reverse_complement
 from helperlibs.bio import seqio
 
 from geneml.args import parse_args
 from geneml.logger import setup_logger, write_setup_info
-from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_cds_sequences, build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.parallelism import compute_optimal_num_parallelism
 from geneml.params import Params, Strand, build_params_namedtuple
@@ -88,6 +87,10 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         Tuple of contig ID, transcript list, and optional SEG-formatted scores.
     """
     start_time = time.time()
+
+    import tensorflow as tf
+
+    from geneml.model_loader import get_cached_gene_ml_model
 
     if params.cpu_only:
         tf.config.set_visible_devices([], 'GPU')
@@ -263,7 +266,8 @@ def main() -> None:
     params = build_params_namedtuple(args)
 
     if params.cpu_only:
-        tf.config.set_visible_devices([], 'GPU')
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
     logfile = ''.join([params.basepath, '.log'])
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
