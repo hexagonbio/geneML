@@ -10,6 +10,7 @@ from helperlibs.bio import seqio
 
 from geneml.args import parse_args
 from geneml.logger import setup_logger, write_setup_info
+from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_cds_sequences, build_prediction_scores_seg, write_fasta, write_gff_file
 from geneml.parallelism import compute_optimal_num_parallelism
 from geneml.params import Params, Strand, build_params_namedtuple
@@ -20,6 +21,17 @@ from geneml.produce_genes import (
     filter_by_dynamic_threshold,
     run_model,
 )
+
+args = parse_args()
+params = build_params_namedtuple(args)
+
+if params.cpu_only:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+
+# TF needs to be imported after environment variables are set
+import tensorflow as tf # noqa: E402, I001
 
 logger = logging.getLogger("geneml")
 
@@ -87,13 +99,6 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         Tuple of contig ID, transcript list, and optional SEG-formatted scores.
     """
     start_time = time.time()
-
-    import tensorflow as tf
-
-    from geneml.model_loader import get_cached_gene_ml_model
-
-    if params.cpu_only:
-        tf.config.set_visible_devices([], 'GPU')
 
     tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
     tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
@@ -262,13 +267,6 @@ def main() -> None:
     Returns:
         None.
     """
-    args = parse_args()
-    params = build_params_namedtuple(args)
-
-    if params.cpu_only:
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
-
     logfile = ''.join([params.basepath, '.log'])
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
     write_setup_info(params)
