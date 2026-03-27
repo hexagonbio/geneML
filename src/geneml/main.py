@@ -27,8 +27,9 @@ params = build_params_namedtuple(args)
 
 if params.cpu_only:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+else:
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 
 # TF needs to be imported after environment variables are set
 import tensorflow as tf # noqa: E402, I001
