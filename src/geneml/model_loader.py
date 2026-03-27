@@ -2,7 +2,6 @@ import os
 from functools import cache
 
 import numpy as np
-from keras.src.saving import load_model
 
 MODEL_INTERGENIC = 0
 MODEL_EXON_START = 1
@@ -21,6 +20,7 @@ class ResidualModelBase:
         """Load a model and initialize context length metadata."""
         self.specify_model_parameters()
 
+        from keras.src.saving import load_model
         self.model = load_model(path, compile=False)
         self.context_length = context_length
 
