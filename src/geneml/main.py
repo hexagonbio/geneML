@@ -31,6 +31,8 @@ if params.cpu_only:
 else:
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 
+os.environ["GLOG_minloglevel"] = "2"
+
 # TF needs to be imported after environment variables are set
 import tensorflow as tf # noqa: E402, I001
 
