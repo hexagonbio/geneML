@@ -320,7 +320,13 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
         )
         return fallback_threshold
 
-    # For each minimum, check if it's between two peaks AND within the allowed threshold range
+    # Select the two most prominent peaks (highest smoothed density).
+    # Candidate valleys must lie between these peaks.
+    top_peak_indices = sorted(maxima_indices, key=lambda idx: smoothed_hist[idx], reverse=True)[:2]
+    left_peak_idx, right_peak_idx = sorted(top_peak_indices)
+
+    # For each minimum, check if it's between the two most prominent peaks
+    # AND within the allowed threshold range.
     valid_minima = []
     for minimum_idx in minima_indices:
         threshold_value = bin_centers[minimum_idx]
@@ -329,15 +335,12 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
         if threshold_value < min_threshold or threshold_value > max_threshold:
             continue
 
-        peaks_left = maxima_indices[maxima_indices < minimum_idx]
-        peaks_right = maxima_indices[maxima_indices > minimum_idx]
-
-        if len(peaks_left) > 0 and len(peaks_right) > 0:
+        if left_peak_idx < minimum_idx < right_peak_idx:
             valid_minima.append(minimum_idx)
 
     if len(valid_minima) == 0:
         logger.warning(
-            'No local minimum found between peaks in range [%.2f, %.2f], '
+            'No local minimum found between the two most prominent peaks in range [%.2f, %.2f], '
             'using fallback threshold of %.1f',
             min_threshold, max_threshold, fallback_threshold
         )
