@@ -283,12 +283,34 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
     smoothed_hist, bin_centers = build_histogram(scores_array, num_bins=num_bins,
                                                  smoothing_window=smoothing_window)
 
-    # Find local minima (valleys) and maxima (peaks)
+    # Find local minima (valleys) and maxima (peaks).
+    # Use the sign of the first derivative, but ignore flat runs so that
+    # plateau-shaped extrema are still detected. If a flat valley exists,
+    # choose its midpoint.
     diff = np.diff(smoothed_hist)
+    trend = np.sign(diff)
+    nonzero_trend_indices = np.flatnonzero(trend)
 
-    # Find indices where derivative crosses zero
-    minima_indices = np.where((diff[:-1] < 0) & (diff[1:] > 0))[0] + 1
-    maxima_indices = np.where((diff[:-1] > 0) & (diff[1:] < 0))[0] + 1
+    minima_indices: list[int] = []
+    maxima_indices: list[int] = []
+    if len(nonzero_trend_indices) >= 2:
+        compressed_trend = trend[nonzero_trend_indices]
+        for i in range(len(compressed_trend) - 1):
+            left_sign = compressed_trend[i]
+            right_sign = compressed_trend[i + 1]
+            left_idx = nonzero_trend_indices[i]
+            right_idx = nonzero_trend_indices[i + 1]
+
+            if left_sign < 0 and right_sign > 0:
+                valley_start = left_idx + 1
+                valley_end = right_idx + 1
+                extrema_idx = (valley_start + valley_end - 1) // 2
+                minima_indices.append(extrema_idx)
+            elif left_sign > 0 and right_sign < 0:
+                peak_start = left_idx + 1
+                peak_end = right_idx + 1
+                extrema_idx = (peak_start + peak_end - 1) // 2
+                maxima_indices.append(extrema_idx)
 
     if len(maxima_indices) < 2 or len(minima_indices) == 0:
         logger.warning(
