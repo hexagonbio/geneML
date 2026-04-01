@@ -263,6 +263,8 @@ def get_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcript]],
         data or no valid valley is found in the allowed range.
     """
     # Collect all transcript scores
+    assert min_threshold < max_threshold, "min_threshold must be less than max_threshold"
+
     all_scores = collect_max_scores(transcripts_by_contig_id)
     num_scores = len(all_scores)
     if num_scores < 100:
