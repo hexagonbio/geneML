@@ -178,6 +178,7 @@ def process_genome(params: Params) -> None:
     genome_start_time = time.time()
 
     contigs, genome_size = parse_contigs(params.inpath, params.contigs_filter)
+    contig_order = list(contigs.keys())
 
     # Disable dynamic scoring if the input sequence is too short
     if params.dynamic_scoring and genome_size < 100_000:
@@ -201,7 +202,7 @@ def process_genome(params: Params) -> None:
     reordered_contigs = reorder_contigs(contigs, num_cores)
 
     transcripts_by_contig_id = {}
-    all_segs = []
+    segs_by_contig_id = {}
     manager = enlighten.get_manager()
     progress = manager.counter(desc=f'Processing {params.inpath}', total=genome_size, unit='bp', color='green')
     if num_cores == 1:
@@ -212,7 +213,7 @@ def process_genome(params: Params) -> None:
             progress.update(seq_len)
             transcripts_by_contig_id[contig_id] = r
             if segs:
-                all_segs.append(segs)
+                segs_by_contig_id[contig_id] = segs
     else:
         with ProcessPoolExecutor(max_workers=num_cores) as pool:
             future_to_contig = {}
@@ -227,7 +228,16 @@ def process_genome(params: Params) -> None:
                 _, r, segs = future.result()
                 transcripts_by_contig_id[contig_id] = r
                 if segs:
-                    all_segs.append(segs)
+                    segs_by_contig_id[contig_id] = segs
+
+    # Reorder transcripts and segs to match original contig order
+    transcripts_by_contig_id = {
+        contig_id: transcripts_by_contig_id[contig_id]
+        for contig_id in contig_order
+        if contig_id in transcripts_by_contig_id
+    }
+    all_segs = [segs_by_contig_id[contig_id] for contig_id in contig_order
+                if contig_id in segs_by_contig_id]
 
     logger.info('Finished processing all contigs')
     if params.dynamic_scoring:
