@@ -9,8 +9,8 @@ Start with a fresh python virtual environment:
 ```bash
 python -m venv geneml
 . geneml/bin/activate
-# Now install the latest release from TestPyPI:
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geneml
+# Now install the latest release from PyPI:
+pip install geneml
 ```
 
 ### Using conda
@@ -18,8 +18,8 @@ Or use a conda environment:
 ```bash
 conda create -n geneml -c conda-forge python=3.13 pip
 conda activate geneml
-# Now install the latest release from TestPyPI:
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geneml
+# Now install the latest release from PyPI:
+pip install geneml
 ```
 
 ### Directly from the repo
@@ -93,7 +93,7 @@ usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS] [--gene-id-p
               [--exon-end-min-score EXON_END_MIN_SCORE] [--gene-candidates GENE_CANDIDATES]
               sequence
 
-geneML 0.5.0
+geneML 1.0.0
 
 positional arguments:
   sequence              Sequence file in FASTA/GenBank/EMBL format.
