@@ -5,6 +5,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import enlighten
+from Bio.Data import IUPACData
 from Bio.Seq import reverse_complement
 from helperlibs.bio import seqio
 
@@ -38,12 +39,16 @@ import tensorflow as tf # noqa: E402, I001
 
 logger = logging.getLogger("geneml")
 
+AMBIGUOUS_DNA_LETTERS = frozenset(IUPACData.ambiguous_dna_letters) - frozenset('ACGTN')
+AMBIGUOUS_DNA_TO_N = str.maketrans({base: 'N' for base in AMBIGUOUS_DNA_LETTERS})
+
 
 def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[str, str], int]:
     """Parse and validate contig sequences from an input file.
 
     Reads genome records, restricted to IDs in contigs_filter if provided.
-    Sequences are converted to uppercase and validated to contain only valid nucleotide characters.
+    Sequences are converted to uppercase, ambiguous IUPAC DNA codes are mapped to N,
+    and the result is validated to contain only valid nucleotide characters.
 
     Args:
         inpath: Path to an input sequence file in FASTA/GenBank/EMBL format
@@ -64,6 +69,15 @@ def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[s
         to_process.discard(record.id)
 
         seq = str(record.seq).upper()
+        ambiguous_dna_letters = sorted(set(seq) & AMBIGUOUS_DNA_LETTERS)
+        if ambiguous_dna_letters:
+            logger.warning(
+                'Contig %s contains ambiguous DNA codes %s; converting them to N.',
+                record.id,
+                ', '.join(ambiguous_dna_letters),
+            )
+
+        seq = seq.translate(AMBIGUOUS_DNA_TO_N)
         # Check if sequence is valid
         if not seq:
             raise ValueError(f"Contig {record.id} has no sequence.")
