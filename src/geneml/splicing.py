@@ -4,12 +4,30 @@ from geneml.types import Exon, Transcript, TranscriptVariant
 
 logger = logging.getLogger("geneml")
 
+
+def exons_in_transcriptional_order(exons, strand):
+    """
+    Returns exons in transcriptional order.
+
+    Args:
+        exons: List or tuple of Exon objects.
+        strand: +1 for forward strand, -1 for reverse strand.
+
+    Returns:
+        List of Exon objects in transcriptional order.
+    """
+    exons = sorted(exons, key=lambda e: e.start)
+    if strand == -1:
+        exons = list(reversed(exons))
+    return exons
+
+
 def get_ordered_introns(exons: list[Exon] | tuple[Exon, ...], strand: int) -> list[tuple[int,int]]:
     """
     Returns introns (donor, acceptor) in transcriptional order.
 
     Args:
-        exons: List or tuple of Exon objects, sorted by genomic position.
+        exons: List or tuple of Exon objects.
         strand: +1 for forward strand, -1 for reverse strand.
 
     Returns:
@@ -19,6 +37,7 @@ def get_ordered_introns(exons: list[Exon] | tuple[Exon, ...], strand: int) -> li
         return []  # single-exon transcript has no introns
 
     introns = []
+    exons = exons_in_transcriptional_order(exons, strand)
     for i in range(len(exons) - 1):
         # donor = 5' splice site, acceptor = 3' splice site (transcriptional)
         if strand == 1:
