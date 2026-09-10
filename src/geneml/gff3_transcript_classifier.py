@@ -137,9 +137,12 @@ def load_gff3_transcripts(lines: list[str]) -> tuple[list[str], dict[str, Parsed
             if not transcript_id:
                 raise ValueError("Encountered an mRNA feature without an ID attribute")
 
-            parent = attributes.get("Parent")
-            if parent is None:
-                parent = attributes["gene_id"]
+            parent = (
+                attributes.get("Parent")
+                or attributes.get("gene_id")
+                or attributes.get("geneID")
+                or attributes["GeneID"]
+            )
             parent_id = parent.split(",")[0]
 
             transcript = ParsedTranscript(
