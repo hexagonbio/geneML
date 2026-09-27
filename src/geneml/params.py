@@ -41,7 +41,7 @@ class Params(namedtuple('Params', (
     'num_cores', 'debug', 'verbose', 'basepath', 'inpath', 'outpath',
     'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
     'max_transcripts', 'allow_opposite_strand_overlaps',
-    'min_exon_size', 'max_exon_size', 'dynamic_scoring',
+    'intron_penalty', 'min_exon_size', 'max_exon_size', 'dynamic_scoring',
     'cpu_only', 'gene_id_prefix',
 ))):
     """Immutable runtime parameter container used throughout geneML."""
@@ -87,6 +87,7 @@ class Params(namedtuple('Params', (
                 'max_exon_size': self.max_exon_size,
                 'min_intron_size': self.min_intron_size,
                 'max_intron_size': self.max_intron_size,
+                'intron_penalty': self.intron_penalty,
                 'cds_start_min_score': self.cds_start_min_score,
                 'cds_end_min_score': self.cds_end_min_score,
                 'exon_start_min_score': self.exon_start_min_score,
@@ -196,6 +197,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'min_gene_score': min_gene_score,
         'gene_candidates': args.gene_candidates,
         'dynamic_scoring': dynamic_scoring,
+        'intron_penalty': args.intron_penalty,
 
         'single_recurse_max_num_ops': args.max_recursions,
         'recurse_region_max_num_ops': 2 * args.max_recursions,
