@@ -197,7 +197,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'min_gene_score': min_gene_score,
         'gene_candidates': args.gene_candidates,
         'dynamic_scoring': dynamic_scoring,
-        'intron_penalty': args.intron_penalty,
+        'intron_penalty': 0.3 if args.yeast else args.intron_penalty,
 
         'single_recurse_max_num_ops': args.max_recursions,
         'recurse_region_max_num_ops': 2 * args.max_recursions,

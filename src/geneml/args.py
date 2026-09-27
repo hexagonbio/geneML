@@ -184,6 +184,8 @@ def check_args(parser, args) -> None:
     if args.min_intron_size > args.max_intron_size:
         parser.error(f"--min-intron-size ({args.min_intron_size}) cannot exceed "
                      f"--max-intron-size ({args.max_intron_size}).")
+    if args.yeast and args.intron_penalty:
+        parser.error("--yeast is incompatible with --intron-penalty; use one or the other.")
     check_paths(parser, args)
 
 
@@ -288,6 +290,10 @@ def parse_args(argv=None) -> Namespace:
                           type=unit_float,
                           default=0.0,
                           help=("Gene score penalty for each intron in the gene call (default: %(default)s)."))
+    advanced.add_argument('--yeast',
+                          action='store_true',
+                          help=("Use settings optimized for low-intron yeast genomes."
+                                "This is equivalent to setting --intron-penalty 0.3 (tested for S. cerevisiae)."))
     advanced.add_argument('--cds-start-min-score',
                           type=unit_float,
                           default=0.01,
