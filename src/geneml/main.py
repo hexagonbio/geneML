@@ -272,7 +272,8 @@ def process_genome(params: Params) -> None:
         write_gff_file(contigs, genes_by_contig_id, params.outpath,
                    mean_gene_score=mean_gene_score)
         if params.output_genes or params.output_proteins:
-            cdses_by_transcript = build_cds_sequences(contigs, genes_by_contig_id)
+            original_contigs = {record.id: str(record.seq) for record in seqio.parse(params.inpath)}
+            cdses_by_transcript = build_cds_sequences(original_contigs, genes_by_contig_id)
             if params.output_genes:
                 logger.info('Writing gene sequences to %s', params.output_genes)
                 write_fasta(cdses_by_transcript, params.output_genes, sequence_type = 'cds')
