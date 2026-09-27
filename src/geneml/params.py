@@ -42,7 +42,7 @@ class Params(namedtuple('Params', (
     'single_recurse_max_num_ops', 'recurse_region_max_num_ops',
     'max_transcripts', 'allow_opposite_strand_overlaps',
     'intron_penalty', 'min_exon_size', 'max_exon_size', 'dynamic_scoring',
-    'cpu_only', 'gene_id_prefix',
+    'cpu_only', 'gene_id_prefix', 'mask_repeats', 'mask_repeats_min_len',
 ))):
     """Immutable runtime parameter container used throughout geneML."""
 
@@ -79,6 +79,8 @@ class Params(namedtuple('Params', (
                 'max_transcripts': self.max_transcripts,
                 'allow_opposite_strand_overlaps': self.allow_opposite_strand_overlaps,
                 'gene_candidates': self.gene_candidates,
+                'mask_repeats': self.mask_repeats,
+                'mask_repeats_min_len': self.mask_repeats_min_len,
             },
             'thresholds': {
                 'dynamic_scoring': self.dynamic_scoring,
@@ -198,6 +200,8 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'gene_candidates': args.gene_candidates,
         'dynamic_scoring': dynamic_scoring,
         'intron_penalty': 0.3 if args.yeast else args.intron_penalty,
+        'mask_repeats': args.mask_repeats,
+        'mask_repeats_min_len': args.mask_repeats_min_len,
 
         'single_recurse_max_num_ops': args.max_recursions,
         'recurse_region_max_num_ops': 2 * args.max_recursions,
