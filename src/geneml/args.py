@@ -304,6 +304,10 @@ def parse_args(argv=None) -> Namespace:
                           default=0.01,
                           help=("Minimum model score for considering an exon end "
                                 "(default: %(default)s)."))
+    advanced.add_argument('--max-recursions',
+                          type=positive_int,
+                          default=100000,
+                          help=("Maximum number of recursive gene searches per locus (default: %(default)s)."))
     advanced.add_argument('--gene-candidates',
                           type=positive_int,
                           default=5000,

@@ -197,8 +197,8 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'gene_candidates': args.gene_candidates,
         'dynamic_scoring': dynamic_scoring,
 
-        'single_recurse_max_num_ops': 100000,
-        'recurse_region_max_num_ops': 200000,
+        'single_recurse_max_num_ops': args.max_recursions,
+        'recurse_region_max_num_ops': 2 * args.max_recursions,
         'cpu_only': args.cpu_only,
     }
 
