@@ -1,6 +1,7 @@
 import gc
 import logging
 import os
+import re
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -43,7 +44,24 @@ AMBIGUOUS_DNA_LETTERS = frozenset(IUPACData.ambiguous_dna_letters) - frozenset('
 AMBIGUOUS_DNA_TO_N = str.maketrans({base: 'N' for base in AMBIGUOUS_DNA_LETTERS})
 
 
-def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[str, str], int]:
+def hardmask_long_repeats(seq: str, min_repeat_len: int) -> str:
+    """Mask repeats of at least min_repeat_len bases with N."""
+    if min_repeat_len <= 0:
+        return seq
+
+    def mask(match: re.Match[str]) -> str:
+        return 'N' * len(match.group())
+
+    return re.sub(
+        rf'[a-z]{{{min_repeat_len},}}',
+        mask,
+        seq,
+    )
+
+
+def parse_contigs(inpath: str, contigs_filter: list[str] | None,
+                  mask_repeats: bool = False, mask_repeats_min_len: int = 0,
+                  ) -> tuple[dict[str, str], int]:
     """Parse and validate contig sequences from an input file.
 
     Reads genome records, restricted to IDs in contigs_filter if provided.
@@ -53,6 +71,8 @@ def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[s
     Args:
         inpath: Path to an input sequence file in FASTA/GenBank/EMBL format
         contigs_filter: Optional list of contig IDs to include
+        mask_repeats: If True, mask repetitive regions (lowercase letters) with N.
+        mask_repeats_min_len: Minimum length of repetitive regions to mask.
 
     Returns:
         Tuple of (contigs, genome_size) where contigs is a dictionary mapping contig ID to
@@ -68,7 +88,13 @@ def parse_contigs(inpath: str, contigs_filter: list[str] | None) -> tuple[dict[s
             continue
         to_process.discard(record.id)
 
-        seq = str(record.seq).upper()
+        seq = str(record.seq)
+
+        if mask_repeats and mask_repeats_min_len > 0:
+            seq = hardmask_long_repeats(seq, mask_repeats_min_len)
+
+        seq = seq.upper()
+
         ambiguous_dna_letters = sorted(set(seq) & AMBIGUOUS_DNA_LETTERS)
         if ambiguous_dna_letters:
             logger.warning(
@@ -191,7 +217,8 @@ def process_genome(params: Params) -> None:
     num_cores = params.num_cores
     genome_start_time = time.time()
 
-    contigs, genome_size = parse_contigs(params.inpath, params.contigs_filter)
+    contigs, genome_size = parse_contigs(params.inpath, params.contigs_filter,
+                                         params.mask_repeats, params.mask_repeats_min_len)
     contig_order = list(contigs.keys())
 
     # Disable dynamic scoring if the input sequence is too short

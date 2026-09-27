@@ -186,6 +186,8 @@ def check_args(parser, args) -> None:
                      f"--max-intron-size ({args.max_intron_size}).")
     if args.yeast and args.intron_penalty:
         parser.error("--yeast is incompatible with --intron-penalty; use one or the other.")
+    if args.mask_repeats_min_len and not args.mask_repeats:
+        parser.error("--mask-repeats-min-len requires --mask-repeats.")
     check_paths(parser, args)
 
 
@@ -251,6 +253,14 @@ def parse_args(argv=None) -> Namespace:
     advanced.add_argument('--contigs-filter',
                           type=str,
                           help="Run only on selected contigs (comma separated string).")
+    advanced.add_argument('--mask-repeats',
+                          action='store_true',
+                          help="Hard mask repetitive regions (lowercase letters in input sequences)"
+                          "to limit gene predictions in these regions.")
+    advanced.add_argument('--mask-repeats-min-len',
+                          type=positive_int,
+                          default=100,
+                          help="Minimum length of repetitive regions to mask (default: %(default)s).")
     advanced.add_argument('--write-raw-scores',
                           action='store_true',
                           help=("Instead of running gene calling, "
