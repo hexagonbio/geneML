@@ -284,6 +284,10 @@ def parse_args(argv=None) -> Namespace:
                           type=positive_int,
                           default=400,
                           help="Maximum intron size (default: %(default)s).")
+    advanced.add_argument('--intron-penalty',
+                          type=unit_float,
+                          default=0.0,
+                          help=("Gene score penalty for each intron in the gene call (default: %(default)s)."))
     advanced.add_argument('--cds-start-min-score',
                           type=unit_float,
                           default=0.01,

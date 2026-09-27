@@ -393,7 +393,8 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
 
 @njit
-def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent]) -> float:
+def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent],
+                    intron_penalty: float = 0.0) -> float:
     """Compute a composite quality score for a complete gene call.
 
     Scores a gene structure by combining two metrics:
@@ -444,6 +445,15 @@ def score_gene_call(preds: np.ndarray, gene_call: list[GeneEvent]) -> float:
         border_score = ends_score
 
     score = (event_consistency_score + border_score) / 2
+
+    if intron_penalty == 0.0:
+        return score
+
+    # Apply intron penalty
+    num_introns = (len(gene_call) - 2) // 2
+    if num_introns > 0:
+        score -= num_introns * intron_penalty
+
     return score
 
 
@@ -705,6 +715,7 @@ def select_by_margin(group: list[tuple[float, list[GeneEvent]]], score_margin: f
 @njit
 def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
                       min_score: float, max_transcripts: int,
+                      intron_penalty: float,
                       score_margin_loose: float, score_margin_strict: float,
                       ) -> list[tuple[int, float, list[GeneEvent]]]:
     """Select best gene calls from candidates, supporting alternative transcripts.
@@ -735,7 +746,7 @@ def select_gene_calls(preds: np.ndarray, gene_calls: list[list[GeneEvent]],
     group_id = 0
 
     for gene_call in gene_calls:
-        score = score_gene_call(preds, gene_call)
+        score = score_gene_call(preds, gene_call, intron_penalty)
         if score < min_score:
             continue
 
@@ -899,6 +910,6 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
         else:
             min_score = params.min_gene_score
         all_best_scores = select_gene_calls(preds, all_gene_calls, min_score,
-                                            params.max_transcripts,
+                                            params.max_transcripts, params.intron_penalty,
                                             score_margin_loose=0.4, score_margin_strict=0.2)
     return all_best_scores
