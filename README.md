@@ -60,6 +60,7 @@ You can override this threshold manually, for example:
 ```bash
 geneml genome.fasta --min-gene-score 0.5
 ```
+
 ## Output
 geneML writes gene annotations in GFF3 format.
 ### Fields
@@ -77,10 +78,46 @@ Each feature has a unique `ID` and, for child features, a `Parent` attribute spe
 | Transcript | GML000001_mRNA1         |
 | Exon       | GML000001_mRNA1_exon1   |
 | CDS        | GML000001_mRNA1_CDS1    |
-### Scores
-The feature score ranges between 0 and 1 and is a measure of how well the prediction aligns with the raw probabilities outputted by the geneML CNN.<br>
-A higher score indicates a higher prediction confidence.
+
+### Additional information
 The directive ##geneml-mean-gene-score (found at the top of the GFF file) stores the average score of predicted genes.
+
+## Gene scoring and selection
+geneML initially predicts many potential gene structures for the same locus.<br>
+Every such gene call is assigned a quality score, ranging from 0 (very low confidence) to 1 (highest confidence).<br>
+The quality score measures how well a gene call agrees with the per-position class probabilities that are output by geneML's convolutional neural network.<br>
+
+The quality score is calculated as:<br>
+Score = (A + B) / 2, where:
+
+- A. Event consistency score: How well exon/intron regions match the model's is_exon/is_intron class probabilites
+- B. Border score: Average model confidence at CDS start, CDS end and splice site positions
+
+geneML applies the following strategy for select the best gene call(s):<br>
+For each group of overlapping predictions, we filter out gene calls that do not score within a margin of 0.2 from the maximum score in the group.<br>
+We build an initial selection that contains a seed gene call, which is the highest-scoring
+gene call at the earliest start position, and any gene calls that are valid alternatives to it.<br>
+A gene call is considered a valid alternative to another if:<br>
+- The combined probabilities of any added events (gene start, gene end and splice sites) exceed those of any removed events by at least 0.2, or:
+- There is a single event difference with a probability of at least 0.2.<br>
+From this selection, we define the gene call with the longest CDS as the primary transcript. We define the other gene calls as alternative
+transcripts, and classify the type of alternative transcript by comparing their gene structure to the
+primary transcript.<br>
+
+We remove low-confidence transcripts based on a minimum score.<br>
+If enough input sequence is provided (at least 100 kb) and at least 100 loci are predicted, this minimum score is set dynamically.<br>
+For a given genome, quality scores typically follow a bimodal distribution, with the first peak
+representing short, low-confidence transcripts and the second peak representing longer,
+high-confidence transcripts.<br>
+The score cutoff is defined based on the local minimum between the two peaks.<br>
+In absence of sufficient data or when no local minimum can be found, the default score threshold is 0.5.<br>
+The threshold can be changed by setting --min-gene-score.
+
+Scores included in the GFF3 output:
+- Exon / CDS: Quality score for the exon
+- Transcript: Quality score for the full gene call
+- Gene: Highest transcript score for the locus
+
 ## Full Usage
 ```
 geneml --help
