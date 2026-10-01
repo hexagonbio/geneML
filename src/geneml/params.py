@@ -168,6 +168,12 @@ def build_params_namedtuple(args: Namespace) -> Params:
                 f"got: {args.min_gene_score}"
             ) from exc
 
+    # Parse mask_repeats_min_len
+    mask_repeats_min_len = args.mask_repeats_min_len
+
+    if args.mask_repeats and args.mask_repeats_min_len is None:
+        mask_repeats_min_len = 100
+
     params_dict = {
         'model_path': args.model,
         'context_length': args.context_length if args.context_length else 800,
@@ -201,7 +207,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
         'dynamic_scoring': dynamic_scoring,
         'intron_penalty': 0.3 if args.yeast else args.intron_penalty,
         'mask_repeats': args.mask_repeats,
-        'mask_repeats_min_len': args.mask_repeats_min_len,
+        'mask_repeats_min_len': mask_repeats_min_len,
 
         'single_recurse_max_num_ops': args.max_recursions,
         'recurse_region_max_num_ops': 2 * args.max_recursions,

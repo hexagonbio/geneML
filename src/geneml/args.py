@@ -259,8 +259,8 @@ def parse_args(argv=None) -> Namespace:
                           "to limit gene predictions in these regions.")
     advanced.add_argument('--mask-repeats-min-len',
                           type=positive_int,
-                          default=100,
-                          help="Minimum length of repetitive regions to mask (default: %(default)s).")
+                          default=None,
+                          help="Minimum length of repetitive regions to mask (if --mask-repeats is used) (default: 100).")
     advanced.add_argument('--write-raw-scores',
                           action='store_true',
                           help=("Instead of running gene calling, "
