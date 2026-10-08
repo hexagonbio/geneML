@@ -20,7 +20,7 @@ class ResidualModelBase:
         """Load a model and initialize context length metadata."""
         self.specify_model_parameters()
 
-        from keras.src.saving import load_model
+        from keras.saving import load_model
         self.model = load_model(path, compile=False)
         self.context_length = context_length
 
