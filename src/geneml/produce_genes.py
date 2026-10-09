@@ -384,7 +384,7 @@ def filter_by_dynamic_threshold(transcripts_by_contig_id: dict[str, list[Transcr
 
 
 def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcript]],
-                                gene_id_prefix: str | None) -> tuple[dict[str, list[Gene]], float | None]:
+                                gene_id_prefix: str | None) -> dict[str, list[Gene]]:
     """Assign transcripts to genes and generate unique gene identifiers.
 
     Groups transcripts into gene loci based on the group_id assigned during gene calling.
@@ -400,10 +400,8 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
         gene_id_prefix: Prefix for gene identifiers
 
     Returns:
-        Tuple containing:
-        - Dictionary mapping contig IDs to lists of Gene objects, where each Gene contains
-          one or more alternative transcript isoforms
-        - Average score across all predicted genes, or None if no genes were predicted
+        Dictionary mapping contig IDs to lists of Gene objects, where each Gene contains
+        one or more alternative transcript isoforms
     """
     genes_by_contig = defaultdict(list)
     gene_count = 0
@@ -478,4 +476,4 @@ def assign_transcripts_to_genes(transcripts_by_contig_id: dict[str, list[Transcr
     mean_gene_score = gene_score_sum / gene_count if gene_count > 0 else None
     logger.info('Average gene score: %.3f', mean_gene_score if mean_gene_score is not None else 0.0)
 
-    return genes_by_contig, mean_gene_score
+    return genes_by_contig

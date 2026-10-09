@@ -156,3 +156,17 @@ class Gene:
             else:
                 transcript_variant = transcript.classify_transcript_variant(primary)
                 transcript.set_transcript_variant(transcript_variant)
+
+
+@dataclass(frozen=True)
+class GenomeResult:
+    """Genome-wide gene prediction results."""
+
+    genes_by_contig_id: dict[str, list[Gene]]
+    segs: list[str] | None = None   # representation of model scores, debug only
+
+    @property
+    def mean_gene_score(self) -> float | None:
+        """Compute the mean gene score across all predicted genes."""
+        scores = [g.score for genes in self.genes_by_contig_id.values() for g in genes]
+        return sum(scores) / len(scores) if scores else None
