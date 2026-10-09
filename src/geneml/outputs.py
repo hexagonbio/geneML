@@ -1,3 +1,6 @@
+"""Functions for writing geneML outputs in GFF3, FASTA, and SEG formats."""
+
+import logging
 import os
 
 import numba
@@ -14,6 +17,8 @@ from geneml.model_loader import (
     MODEL_IS_INTRON,
 )
 from geneml.types import Gene
+
+logger = logging.getLogger("geneml")
 
 
 def build_gff_coords(contig_id: str, gene: Gene, source: str, offset: int = 0) -> list[tuple]:
@@ -244,3 +249,20 @@ def build_prediction_scores_seg(contig_id: str, preds: np.ndarray, rc_preds: np.
                     last_i = i
 
     return '\n'.join(lines)
+
+
+def write_seg_file(segs_list, params) -> None:
+    """Write SEG-format score tracks to a file.
+
+    Args:
+        segs_list: List of SEG-format score strings.
+        params: Runtime parameters.
+
+    Returns:
+        None.
+    """
+    logger.info('Writing raw scores to %s', params.basepath+'.seg')
+    with open(params.basepath+'.seg', 'w', encoding='utf-8') as f:
+        f.write('#track graphType=heatmap maxHeightPixels=20:20:20 color=0,0,255 altColor=255,0,0\n')
+        for segs in segs_list:
+            f.write(f'{segs}\n')
