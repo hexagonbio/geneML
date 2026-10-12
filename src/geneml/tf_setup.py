@@ -27,23 +27,16 @@ def suppress_stderr():
         os.close(devnull)
 
 
-def import_tensorflow(use_cpu: bool = False):
-    """Import TensorFlow, quietly if running on CPU.
+def import_tensorflow():
+    """Import TensorFlow with CPU-only configuration and suppressed logging.
 
     Args:
-        use_cpu: If True, force TensorFlow to run on CPU and suppress its verbose logging
+        None.
 
     Returns:
-        The imported TensorFlow module.
+        None.
     """
-
-    if use_cpu:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-        os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-        with suppress_stderr():
-            import tensorflow as tf
-    else:
-        os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "1")
-        import tensorflow as tf
-
-    return tf
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    with suppress_stderr():
+        import tensorflow as tf  # noqa: F401, PLC0415
