@@ -3,10 +3,28 @@
 import argparse
 import os
 import re
+import sys
 from argparse import Namespace
 
 from geneml import __version__
 from geneml.params import Strand
+
+
+class DeprecatedFlag(argparse.Action):
+    """Accept a flag that has no effect and print an argparse-style warning."""
+
+    def __init__(self, option_strings, dest, message=None, **kwargs):
+        self.message = message
+        kwargs.setdefault("nargs", 0)
+        kwargs.setdefault("help", argparse.SUPPRESS)
+        kwargs.setdefault("default", argparse.SUPPRESS)
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        text = f"{option_string} is deprecated"
+        if self.message:
+            text += f": {self.message}"
+        print(f"{parser.prog}: warning: {text}", file=sys.stderr)
 
 
 def positive_int(value) -> int:
@@ -244,9 +262,9 @@ def parse_args(argv=None) -> Namespace:
     advanced.add_argument('-d', '--debug',
                           action='store_true',
                           help="Enable debug mode.")
-    advanced.add_argument('--cpu-only',
-                          action='store_true',
-                          help="Use CPU only for inference, disable GPU usage.")
+    advanced.add_argument("--cpu-only",
+                          action=DeprecatedFlag,
+                          message="geneML always runs on CPU.")
     advanced.add_argument('--strand',
                           type=str,
                           choices=[x.value for x in Strand],

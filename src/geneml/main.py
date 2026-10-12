@@ -1,7 +1,6 @@
 """Main entry point for geneML."""
 
 import logging
-import sys
 
 from geneml.args import parse_args
 from geneml.logger import setup_logger, write_setup_info
@@ -27,12 +26,7 @@ def main() -> None:
     setup_logger(logfile, debug = params.debug, verbose= params.verbose)
     write_setup_info(params)
 
-    try:
-        import_tensorflow(params.cpu_only)
-    except RuntimeError as e:
-        logger.error("%s", e)
-        sys.exit(1)
-
+    import_tensorflow()
     from geneml.run import run_geneML
     run_geneML(params)
 
