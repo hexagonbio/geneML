@@ -1,3 +1,5 @@
+"""Core functionality for calling genes from geneML model predictions."""
+
 import logging
 import time
 

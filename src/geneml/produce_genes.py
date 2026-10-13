@@ -1,3 +1,5 @@
+"""Produce gene calls from model predictions and convert them into Transcript and Gene objects."""
+
 import logging
 from collections import defaultdict
 from typing import Optional

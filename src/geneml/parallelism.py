@@ -1,3 +1,5 @@
+"""Parallel processing utilities for geneML."""
+
 import logging
 import multiprocessing
 

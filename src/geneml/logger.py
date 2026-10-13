@@ -1,3 +1,5 @@
+"""Logging setup and utility functions for geneML."""
+
 import logging
 import sys
 
