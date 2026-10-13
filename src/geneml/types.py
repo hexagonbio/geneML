@@ -1,3 +1,5 @@
+"""Data types for representing gene prediction results."""
+
 from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum

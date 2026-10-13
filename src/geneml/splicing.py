@@ -1,3 +1,5 @@
+"""Classification of alternative transcript variants based on exon/intron structure."""
+
 import logging
 
 from geneml.types import Exon, Transcript, TranscriptVariant

@@ -1,3 +1,5 @@
+"""Parameter handling for geneML."""
+
 import json
 import os
 from argparse import Namespace

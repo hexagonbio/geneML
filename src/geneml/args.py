@@ -1,3 +1,5 @@
+"""Argument parsing and validation for geneML."""
+
 import argparse
 import os
 import re
