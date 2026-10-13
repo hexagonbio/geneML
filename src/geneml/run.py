@@ -23,10 +23,13 @@ def run_geneML(params: Params) -> None:
     manager = enlighten.get_manager()
     progress = manager.counter(desc=f'Processing {params.inpath}', total=genome_size,
                                unit='bp', color='green')
-    result = process_genome(contigs, params,
-                                   on_contig_done=lambda contig_id, seq_len: progress.update(seq_len))
-    progress.close()
-    manager.stop()
+    progress.refresh()   # draw empty progress bar
+    try:
+        result = process_genome(contigs, params,
+                                on_contig_done=lambda contig_id, seq_len: progress.update(seq_len))
+    finally:
+        progress.close()
+        manager.stop()
 
     if result.genes_by_contig_id:
         logger.info('Writing gene predictions to %s', params.outpath)
