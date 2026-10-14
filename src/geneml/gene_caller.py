@@ -271,7 +271,8 @@ def check_exon_validity(preds: np.ndarray, start: int, end: int) -> bool:
 
 @njit
 def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gene: list, seq: str,
-            preds: np.ndarray, params: Params, current_cds: str = "") -> int:
+            preds: np.ndarray, params: Params, valid_exons: np.ndarray, current_cds: str = "",
+            ) -> int:
     """Recursively build valid gene structures from filtered gene events.
 
     Explores all valid combinations of gene events (CDS_START, CDS_END, EXON_START, EXON_END)
@@ -297,6 +298,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
         seq: DNA sequence for the genomic region
         preds: Model predictions array with shape (num_features, sequence_length)
         params: Configuration parameters
+        valid_exons: Array to memoize exon validity checks
         current_cds: Incrementally built coding sequence for early validation
 
     Returns:
@@ -345,7 +347,13 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
                 continue
             if exon_size > params.max_exon_size:
                 return num_ops      # Further exon ends make the exon even longer
-            if not check_exon_validity(preds, exon_start, exon_end):
+
+            # Check if this exon has been validated before to avoid redundant checks
+            m = valid_exons[i - 1, j]
+            if m == 0:
+                m = 1 if check_exon_validity(preds, exon_start, exon_end) else 2
+                valid_exons[i - 1, j] = m
+            if m == 2:
                 if exon_end - exon_start <= 20:
                     continue # Short exons may be false positives, try further exon ends
                 return num_ops  # Further ends are likely invalid too
@@ -382,7 +390,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
         if num_ops <= params.single_recurse_max_num_ops:
             num_ops += 1
-            num_ops += recurse(results, events, j + 1, gene, seq, preds, params, new_cds)
+            num_ops += recurse(results, events, j + 1, gene, seq, preds, params, valid_exons, new_cds)
             gene.pop()
         else:
             marker = typed.List.empty_list(GeneEventNumbaType)
@@ -854,8 +862,10 @@ def produce_gene_calls(preds: np.ndarray, events: list[GeneEvent], seq: str, con
                                             min_exon_events=15, max_exon_events=60)
             gene_calls = typed.List.empty_list(GeneCallNumbaType)
             recurse_start_time = python_time()
+            valid_exons = np.zeros((len(filtered_events), len(filtered_events)), dtype=np.int8)
             num_ops += recurse(gene_calls, filtered_events, 0,
-                               typed.List.empty_list(GeneEventNumbaType), seq, preds, params, "")
+                               typed.List.empty_list(GeneEventNumbaType), seq, preds, params,
+                               valid_exons, "")
 
             if params.debug:
                 with objmode:
