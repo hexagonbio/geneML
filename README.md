@@ -120,19 +120,21 @@ Scores included in the GFF3 output:
 
 ## Full Usage
 ```
-geneml --help
-usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS] [--gene-id-prefix GENE_ID_PREFIX] [-m MODEL]
-              [-cl CONTEXT_LENGTH] [-c CORES] [-v] [-d] [--cpu-only] [--strand {forward,reverse,both}]
-              [--contigs-filter CONTIGS_FILTER] [--mask-repeats] [--mask-repeats-min-len MASK_REPEATS_MIN_LEN] [--write-raw-scores]
-              [--max-transcripts MAX_TRANSCRIPTS] [--allow-opposite-strand-overlaps {true,false}] [--min-gene-score MIN_GENE_SCORE]
-              [--min-exon-size MIN_EXON_SIZE] [--max-exon-size MAX_EXON_SIZE] [--min-intron-size MIN_INTRON_SIZE]
+usage: geneml [-h] [--version] [-o OUTPUT] [-g GENES] [-p PROTEINS]
+              [--gene-id-prefix GENE_ID_PREFIX] [-m MODEL] [-cl CONTEXT_LENGTH] [-c CORES] [-v] [-d]
+              [--strand {forward,reverse,both}] [--contigs-filter CONTIGS_FILTER] [--mask-repeats]
+              [--mask-repeats-min-len MASK_REPEATS_MIN_LEN] [--write-raw-scores]
+              [--max-transcripts MAX_TRANSCRIPTS] [--allow-opposite-strand-overlaps {true,false}]
+              [--min-gene-score MIN_GENE_SCORE] [--min-exon-size MIN_EXON_SIZE]
+              [--max-exon-size MAX_EXON_SIZE] [--min-intron-size MIN_INTRON_SIZE]
               [--max-intron-size MAX_INTRON_SIZE] [--intron-penalty INTRON_PENALTY] [--yeast]
               [--cds-start-min-score CDS_START_MIN_SCORE] [--cds-end-min-score CDS_END_MIN_SCORE]
-              [--exon-start-min-score EXON_START_MIN_SCORE] [--exon-end-min-score EXON_END_MIN_SCORE]
-              [--max-recursions MAX_RECURSIONS] [--gene-candidates GENE_CANDIDATES]
+              [--exon-start-min-score EXON_START_MIN_SCORE]
+              [--exon-end-min-score EXON_END_MIN_SCORE] [--max-recursions MAX_RECURSIONS]
+              [--gene-candidates GENE_CANDIDATES]
               sequence
 
-geneML 1.2.0
+geneML 1.3.0
 
 positional arguments:
   sequence              Sequence file in FASTA/GenBank/EMBL format.
@@ -158,23 +160,23 @@ options:
 advanced options:
   -v, --verbose         Enable verbose mode.
   -d, --debug           Enable debug mode.
-  --cpu-only            Use CPU only for inference, disable GPU usage.
   --strand {forward,reverse,both}
                         On which strand to predict genes (default: both).
   --contigs-filter CONTIGS_FILTER
                         Run only on selected contigs (comma separated string).
-  --mask-repeats        Hard mask repetitive regions (lowercase letters in input sequences)to limit gene predictions in these
-                        regions.
+  --mask-repeats        Hard mask repetitive regions (lowercase letters in input sequences)to limit
+                        gene predictions in these regions.
   --mask-repeats-min-len MASK_REPEATS_MIN_LEN
-                        Minimum length of repetitive regions to mask (if --mask-repeats is used) (default: 100).
+                        Minimum length of repetitive regions to mask (if --mask-repeats is used)
+                        (default: 100).
   --write-raw-scores    Instead of running gene calling, output the raw model scores as a .seg file.
   --max-transcripts MAX_TRANSCRIPTS
                         Maximum number of transcripts per gene (default: 5).
   --allow-opposite-strand-overlaps {true,false}
                         Predict overlapping genes on opposite strands (default: true).
   --min-gene-score MIN_GENE_SCORE
-                        Minimum gene score for gene reporting. Can be a float value or 'dynamic' (default: dynamic). Dynamic mode
-                        requires >=100,000 bp total input.
+                        Minimum gene score for gene reporting. Can be a float value or 'dynamic'
+                        (default: dynamic). Dynamic mode requires >=100,000 bp total input.
   --min-exon-size MIN_EXON_SIZE
                         Minimum exon size (default: 1).
   --max-exon-size MAX_EXON_SIZE
@@ -185,8 +187,8 @@ advanced options:
                         Maximum intron size (default: 400).
   --intron-penalty INTRON_PENALTY
                         Gene score penalty for each intron in the gene call (default: 0.0).
-  --yeast               Use settings optimized for low-intron yeast genomes.This is equivalent to setting --intron-penalty 0.3
-                        (tested for S. cerevisiae).
+  --yeast               Use settings optimized for low-intron yeast genomes.This is equivalent to
+                        setting --intron-penalty 0.3 (tested for S. cerevisiae).
   --cds-start-min-score CDS_START_MIN_SCORE
                         Minimum model score for considering a CDS start (default: 0.01).
   --cds-end-min-score CDS_END_MIN_SCORE
