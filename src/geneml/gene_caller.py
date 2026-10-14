@@ -327,6 +327,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             continue  # can only add a start after an end
 
         new_cds = current_cds
+        num_new_stops = 0
 
         # If we're starting an exon, check the size of the previous intron
         if event.type == EXON_START:
@@ -362,12 +363,15 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
             exon_seq = seq[exon_start:exon_end]
             new_cds = current_cds + exon_seq
 
+            # Tail = codons that can contain a stop: from the last codon boundary of the old CDS onward
+            tail = current_cds[(len(current_cds) // 3) * 3:] + exon_seq
+            num_new_stops = count_stop_codons(tail)
+
             # For EXON_END, check for premature stop codons to prune invalid paths early
             if event.type == EXON_END:
-                num_stop_codons = count_stop_codons(new_cds)
                 if len(new_cds) > 2 and not starts_with_start_codon(new_cds):
                     return num_ops  # Further exon ends (with same start) will also lack start codon
-                if num_stop_codons > 0:
+                if num_new_stops > 0:
                     return num_ops  # Further exon ends (with same start) will also contain stop codons
 
         # If previous checks passed, add the event to the gene
@@ -375,8 +379,7 @@ def recurse(results: list[list[GeneEvent]], events: list[GeneEvent], i: int, gen
 
         if event.type == CDS_END:
             # Final validity check using cached CDS
-            num_stop_codons = count_stop_codons(new_cds)
-            is_valid = (num_stop_codons == 1 and
+            is_valid = (num_new_stops == 1 and
                        len(new_cds) % 3 == 0 and
                        starts_with_start_codon(new_cds) and
                        ends_with_stop_codon(new_cds))
