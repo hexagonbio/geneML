@@ -10,7 +10,7 @@ from Bio.Seq import reverse_complement
 
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg
-from geneml.parallelism import compute_optimal_num_parallelism
+from geneml.parallelism import compute_num_processes, compute_tensorflow_threads, resolve_cpu_budget
 from geneml.params import Params, Strand
 from geneml.produce_genes import (
     assign_transcripts_to_genes,
@@ -23,7 +23,7 @@ from geneml.types import GenomeResult, Transcript
 logger = logging.getLogger("geneml")
 
 
-def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_count=None) -> tuple[str, list[Transcript], str | None]:
+def process_contig(contig_id: str, seq: str, params: Params) -> tuple[str, list[Transcript], str | None]:
     """Process one contig and return transcript predictions or raw score segments.
 
     Returns only Python-native structures so the result is safely picklable
@@ -33,15 +33,11 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
         contig_id: Contig identifier.
         seq: Contig DNA sequence.
         params: Runtime parameters controlling prediction behavior.
-        tensorflow_thread_count: Optional thread count for TensorFlow ops.
 
     Returns:
         Tuple of contig ID, transcript list, and optional SEG-formatted scores.
     """
     start_time = time.time()
-
-    tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
-    tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
     model = get_cached_gene_ml_model(params.model_path, params.context_length)
 
@@ -114,8 +110,9 @@ def process_genome(contigs: dict[str, str], params: Params,
     Returns:
         GenomeResult containing the predicted genes and segment information.
     """
-    num_cores = params.num_cores
+    user_cores = params.num_cores
 
+    num_contigs = len(contigs)
     contig_order = list(contigs.keys())
     genome_size = sum(len(seq) for seq in contigs.values())
 
@@ -130,33 +127,34 @@ def process_genome(contigs: dict[str, str], params: Params,
         # Create new Params with dynamic_scoring disabled
         params = params._replace(dynamic_scoring=False)
 
-    if num_cores is None:
-        num_cores, tensorflow_thread_count = compute_optimal_num_parallelism(num_contigs=len(contigs))
-        logger.info('Based on available memory, setting parallelism to %d parallel processes '
-                    'and tensorflow threads to %s',
-                    num_cores, tensorflow_thread_count or 'all available')
-    else:
-        tensorflow_thread_count = None
+    cpu_budget = resolve_cpu_budget(user_cores)
+    num_processes = compute_num_processes(cpu_budget, num_contigs, user_cores)
+    tf_threads = compute_tensorflow_threads(cpu_budget, num_processes)
 
-    reordered_contigs = reorder_contigs(contigs, num_cores)
+    logger.info("Running %d parallel processes.", num_processes)
+    logger.info("Running TensorFlow with %d threads per process.", tf_threads)
+
+    tf.config.threading.set_intra_op_parallelism_threads(tf_threads)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+
+    reordered_contigs = reorder_contigs(contigs, num_processes)
 
     transcripts_by_contig_id = {}
     segs_by_contig_id = {}
 
-    if num_cores == 1:
-        logger.info('Running from main thread, parallelism only for tensorflow')
+    if num_processes == 1:
         for contig_id, seq in reordered_contigs:
-            _, r, segs = process_contig(contig_id, seq, params, tensorflow_thread_count)
+            _, r, segs = process_contig(contig_id, seq, params)
             if on_contig_done:
                 on_contig_done(contig_id, len(seq))
             transcripts_by_contig_id[contig_id] = r
             if segs:
                 segs_by_contig_id[contig_id] = segs
     else:
-        with ProcessPoolExecutor(max_workers=num_cores) as pool:
+        with ProcessPoolExecutor(max_workers=num_processes) as pool:
             future_to_contig = {}
             for contig_id, seq in reordered_contigs:
-                future = pool.submit(process_contig, contig_id, seq, params, tensorflow_thread_count)
+                future = pool.submit(process_contig, contig_id, seq, params)
                 future_to_contig[future] = contig_id
 
             for future in as_completed(future_to_contig):
