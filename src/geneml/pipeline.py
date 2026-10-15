@@ -2,15 +2,15 @@
 
 import gc
 import logging
+import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import tensorflow as tf
 from Bio.Seq import reverse_complement
 
 from geneml.model_loader import get_cached_gene_ml_model
 from geneml.outputs import build_prediction_scores_seg
-from geneml.parallelism import compute_num_processes, compute_tensorflow_threads, resolve_cpu_budget
+from geneml.parallelism import compute_num_processes, compute_tensorflow_threads, init_worker, resolve_cpu_budget
 from geneml.params import Params, Strand
 from geneml.produce_genes import (
     assign_transcripts_to_genes,
@@ -18,6 +18,7 @@ from geneml.produce_genes import (
     filter_by_dynamic_threshold,
     run_model,
 )
+from geneml.tf_setup import configure_threads
 from geneml.types import GenomeResult, Transcript
 
 logger = logging.getLogger("geneml")
@@ -134,15 +135,13 @@ def process_genome(contigs: dict[str, str], params: Params,
     logger.info("Running %d parallel processes.", num_processes)
     logger.info("Running TensorFlow with %d threads per process.", tf_threads)
 
-    tf.config.threading.set_intra_op_parallelism_threads(tf_threads)
-    tf.config.threading.set_inter_op_parallelism_threads(1)
-
     reordered_contigs = reorder_contigs(contigs, num_processes)
 
     transcripts_by_contig_id = {}
     segs_by_contig_id = {}
 
     if num_processes == 1:
+        configure_threads(tf_threads)
         for contig_id, seq in reordered_contigs:
             _, r, segs = process_contig(contig_id, seq, params)
             if on_contig_done:
@@ -151,20 +150,29 @@ def process_genome(contigs: dict[str, str], params: Params,
             if segs:
                 segs_by_contig_id[contig_id] = segs
     else:
-        with ProcessPoolExecutor(max_workers=num_processes) as pool:
-            future_to_contig = {}
-            for contig_id, seq in reordered_contigs:
-                future = pool.submit(process_contig, contig_id, seq, params)
-                future_to_contig[future] = contig_id
+        ctx = multiprocessing.get_context("spawn")
+        log_queue = ctx.Queue()
+        listener = logging.handlers.QueueListener(
+            log_queue, *logger.handlers, respect_handler_level=True)
+        listener.start()
+        try:
+            with ProcessPoolExecutor(max_workers=num_processes, mp_context=ctx,
+                                     initializer=init_worker, initargs=(tf_threads, log_queue)) as pool:
+                future_to_contig = {}
+                for contig_id, seq in reordered_contigs:
+                    future = pool.submit(process_contig, contig_id, seq, params)
+                    future_to_contig[future] = contig_id
 
-            for future in as_completed(future_to_contig):
-                contig_id = future_to_contig[future]
-                if on_contig_done:
-                    on_contig_done(contig_id, len(contigs[contig_id]))
-                _, r, segs = future.result()
-                transcripts_by_contig_id[contig_id] = r
-                if segs:
-                    segs_by_contig_id[contig_id] = segs
+                for future in as_completed(future_to_contig):
+                    contig_id = future_to_contig[future]
+                    if on_contig_done:
+                        on_contig_done(contig_id, len(contigs[contig_id]))
+                    _, r, segs = future.result()
+                    transcripts_by_contig_id[contig_id] = r
+                    if segs:
+                        segs_by_contig_id[contig_id] = segs
+        finally:
+            listener.stop()
 
     # Reorder transcripts and segs to match original contig order
     transcripts_by_contig_id = {

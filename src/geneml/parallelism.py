@@ -5,6 +5,9 @@ import os
 
 import psutil
 
+from geneml.logger import setup_worker_logger
+from geneml.tf_setup import configure_threads, import_tensorflow
+
 logger = logging.getLogger("geneml")
 
 
@@ -122,3 +125,18 @@ def compute_tensorflow_threads(cpu_budget: int, num_processes: int) -> int:
     assert num_processes > 0, "Number of processes must be greater than 0."
     assert cpu_budget > 0, "CPU budget must be greater than 0."
     return max(1, cpu_budget // num_processes)
+
+
+def init_worker(tf_threads: int, log_queue) -> None:
+    """Initialize a worker process for parallel processing.
+
+    Args:
+        tf_threads: The number of threads to use for TensorFlow.
+        log_queue: A multiprocessing.Queue for logging.
+
+    Returns:
+        None.
+    """
+    setup_worker_logger(log_queue)
+    import_tensorflow()
+    configure_threads(tf_threads)

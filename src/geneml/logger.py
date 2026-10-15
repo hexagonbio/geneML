@@ -1,6 +1,7 @@
 """Logging setup and utility functions for geneML."""
 
 import logging
+import logging.handlers
 import sys
 
 from geneml import __version__
@@ -60,6 +61,20 @@ def setup_logger(logfile, debug = False, verbose = False) -> None:
     for handler in file_handler, stream_handler:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+
+
+def setup_worker_logger(log_queue) -> None:
+    """Configure logging for a worker process.
+
+    Args:
+        log_queue: A multiprocessing.Queue for logging.
+
+    Returns:
+        None.
+    """
+    logger.handlers[:] = [logging.handlers.QueueHandler(log_queue)]
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
 
 
 def write_setup_info(params) -> None:
