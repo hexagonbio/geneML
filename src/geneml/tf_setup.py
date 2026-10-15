@@ -40,3 +40,17 @@ def import_tensorflow():
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     with suppress_stderr():
         import tensorflow as tf  # noqa: F401, PLC0415
+
+
+def configure_threads(tf_threads: int) -> None:
+    """Configure TensorFlow threading.
+
+    Args:
+        tf_threads: The number of threads to use for TensorFlow.
+
+    Returns:
+        None.
+    """
+    import tensorflow as tf  # noqa: F401, PLC0415
+    tf.config.threading.set_intra_op_parallelism_threads(tf_threads)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
