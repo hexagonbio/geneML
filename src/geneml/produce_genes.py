@@ -27,16 +27,25 @@ def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100
         Concatenated score matrix with shape (num_features, sequence_length).
     """
     seq_len = len(seq)
-    pred_list = []
+    if seq_len == 0:
+        raise ValueError("Cannot run the model on an empty sequence")
+
     padding = context_length // 2
-    for i in range(0, seq_len, chunk_size):
-        start = i
-        end = min(seq_len, i + chunk_size)
+    out: np.ndarray | None = None
+    for start in range(0, seq_len, chunk_size):
+        end = min(seq_len, start + chunk_size)
         padded_start = max(0, start - padding)
         padded_end = min(seq_len, end + padding)
         preds = model.predict(seq[padded_start:padded_end], return_dict=False)
-        pred_list.append(preds[:, (start-padded_start):(end-padded_start)])
-    return np.concatenate(pred_list, axis=1)
+        assert isinstance(preds, np.ndarray)
+
+        if out is None:
+            out = np.empty((preds.shape[0], seq_len), dtype=preds.dtype)
+        out[:, start:end] = preds[:, start - padded_start:end - padded_start]
+
+    assert out is not None
+    assert out.shape[1] == seq_len, f"Output shape mismatch: {out.shape} vs {seq_len}"
+    return out
 
 
 def create_exons(gene_events: list[GeneEvent], preds: np.ndarray,
