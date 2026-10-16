@@ -1,8 +1,10 @@
 """Produce gene calls from model predictions and convert them into Transcript and Gene objects."""
 
+import ctypes
+import gc
 import logging
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -12,6 +14,19 @@ from geneml.params import Params
 from geneml.types import CDS_END, CDS_START, EXON_END, EXON_START, Exon, Gene, GeneEvent, Transcript
 
 logger = logging.getLogger("geneml")
+
+_malloc_trim: Any | None
+
+try:
+    _malloc_trim = ctypes.CDLL("libc.so.6").malloc_trim
+except (OSError, AttributeError):
+    _malloc_trim = None
+
+
+def release_memory() -> None:
+    gc.collect()
+    if _malloc_trim is not None:
+        _malloc_trim(0)
 
 
 def run_model(model: ResidualModelBase, seq: str, context_length, chunk_size=100000) -> np.ndarray:
@@ -186,6 +201,8 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
         scored_gene_calls = produce_gene_calls(preds, events, seq, contig_id + ' forward strand', params)
         if scored_gene_calls:
             transcripts.extend(create_transcripts(scored_gene_calls, preds, seq_length, is_rc=False))
+        del events, scored_gene_calls
+        release_memory()
 
     if rc_preds is not None:
         logger.info('%s 4/5: Building gene calls on reverse strand', contig_id)
@@ -193,6 +210,8 @@ def build_transcripts(preds: Optional[np.ndarray], rc_preds: Optional[np.ndarray
         rc_scored_gene_calls = produce_gene_calls(rc_preds, rc_events, rc_seq, contig_id + ' reverse strand', params)
         if rc_scored_gene_calls:
             transcripts.extend(create_transcripts(rc_scored_gene_calls, rc_preds, seq_length, is_rc=True))
+        del rc_events, rc_scored_gene_calls
+        release_memory()
 
     logger.info('%s 5/5: Selecting best gene calls', contig_id)
 
