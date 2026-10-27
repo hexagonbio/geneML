@@ -156,7 +156,7 @@ def build_params_namedtuple(args: Namespace) -> Params:
     basepath = get_basepath(args.sequence, args.output)
 
     # Parse min_gene_score - can be 'dynamic' or a float value
-    if args.min_gene_score.lower() == 'dynamic':
+    if isinstance(args.min_gene_score, str) and args.min_gene_score.lower() == 'dynamic':
         dynamic_scoring = True
         min_gene_score = 0.5  # Fallback value used if dynamic scoring fails
     else:
