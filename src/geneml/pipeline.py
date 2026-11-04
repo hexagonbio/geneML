@@ -40,8 +40,9 @@ def process_contig(contig_id: str, seq: str, params: Params, tensorflow_thread_c
     """
     start_time = time.time()
 
-    tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
-    tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
+    if tensorflow_thread_count is not None:
+        tf.config.threading.set_inter_op_parallelism_threads(tensorflow_thread_count)
+        tf.config.threading.set_intra_op_parallelism_threads(tensorflow_thread_count)
 
     model = get_cached_gene_ml_model(params.model_path, params.context_length)
 
