@@ -24,7 +24,8 @@ jobs:
         run: |
           geneml tests/fixtures/smoke.fasta \
             --output smoke.gff3 \
+            --write-raw-scores \
             --cores 1 \
             --min-gene-score 0.5
-          test -s smoke.gff3
-          grep -q '^##gff-version ' smoke.gff3
+          test -s smoke.seg
+          grep -q '^#track ' smoke.seg
