@@ -22,10 +22,28 @@ jobs:
         run: geneml --help
       - name: Run model inference smoke test
         run: |
+          set +e
           geneml tests/fixtures/smoke.fasta \
             --output smoke.gff3 \
             --write-raw-scores \
             --cores 1 \
-            --min-gene-score 0.5
-          test -s smoke.seg
-          grep -q '^#track ' smoke.seg
+            --min-gene-score 0.5 > smoke.log 2>&1
+          status=$?
+          cat smoke.log
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+          text = "\n".join(Path("smoke.log").read_text(errors="replace").splitlines()[-20:])
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=geneML smoke failure::{text}")
+          PY
+            exit "$status"
+          fi
+          if [ ! -s smoke.seg ]; then
+            echo "::error::geneML exited successfully but did not create smoke.seg"
+            exit 1
+          fi
+          if ! grep -q '^#track ' smoke.seg; then
+            echo "::error::smoke.seg is missing its SEG track header"
+            exit 1
+          fi
