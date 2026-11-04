@@ -22,7 +22,20 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install geneML
-        run: python -m pip install .
+        run: |
+          set +e
+          python -m pip install . > install.log 2>&1
+          status=$?
+          cat install.log
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+          text = "\n".join(Path("install.log").read_text(errors="replace").splitlines()[-20:])
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=geneML install failure::{text}")
+          PY
+            exit "$status"
+          fi
       - name: Run CLI smoke test
         run: geneml --help
       - name: Run model inference smoke test
