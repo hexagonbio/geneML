@@ -1,0 +1,30 @@
+name: Smoke test
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-smoke:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install geneML
+        run: python -m pip install .
+      - name: Run CLI smoke test
+        run: geneml --help
+      - name: Run model inference smoke test
+        run: |
+          geneml tests/fixtures/smoke.fasta \
+            --output smoke.gff3 \
+            --cores 1 \
+            --min-gene-score 0.5
+          test -s smoke.gff3
+          grep -q '^##gff-version ' smoke.gff3
