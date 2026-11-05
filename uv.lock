@@ -228,7 +228,8 @@ dependencies = [
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
     { name = "psutil" },
     { name = "tensorflow", version = "2.16.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "tensorflow", version = "2.18.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "tensorflow", version = "2.18.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "tensorflow-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
@@ -245,8 +246,9 @@ requires-dist = [
     { name = "numba", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "<0.61.0" },
     { name = "numpy", specifier = ">=1.21.0" },
     { name = "psutil", specifier = ">=5.9.0" },
-    { name = "tensorflow", specifier = ">=2.16.2" },
     { name = "tensorflow", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "<2.17.0" },
+    { name = "tensorflow", marker = "platform_machine != 'x86_64' or sys_platform != 'linux'", specifier = ">=2.16.2" },
+    { name = "tensorflow-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=2.16.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -1239,6 +1241,41 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/92/5f/208e026036bac36c66da5b1a19188ff83a69e34384be37b33875009b1c9b/tensorflow-2.18.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1c0cd29c323908ed35ce72fbcce66f2ef7c8657f9c5024860ffd7ea64cf5d35d", size = 231774618, upload-time = "2025-03-12T00:14:47.67Z" },
     { url = "https://files.pythonhosted.org/packages/85/fd/15a19555f48239890da7116d5e09e7ee22c0199093a8125c8970adb3ff95/tensorflow-2.18.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4ecbb9b3cd3f223ff6861faa1a4c2719c138d870dba90545826685b1c5ba5901", size = 615365475, upload-time = "2025-03-12T00:15:04.871Z" },
     { url = "https://files.pythonhosted.org/packages/30/8a/ffd887e2ecfd0816839b1e1d3bfb81c2050cd5ce73d52f5298c629622b92/tensorflow-2.18.1-cp39-cp39-win_amd64.whl", hash = "sha256:0f84a4c87a30cfb279c30b0077541cb5aaac7506d32adde585adb185277e49d2", size = 368989941, upload-time = "2025-03-12T00:15:24.578Z" },
+]
+
+[[package]]
+name = "tensorflow-cpu"
+version = "2.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "absl-py", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "astunparse", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "flatbuffers", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "gast", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "google-pasta", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "grpcio", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "h5py", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "keras", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "libclang", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "ml-dtypes", version = "0.4.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "opt-einsum", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "packaging", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "protobuf", version = "5.29.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "requests", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "setuptools", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "six", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "tensorboard", version = "2.18.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "tensorflow-io-gcs-filesystem", marker = "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')" },
+    { name = "termcolor", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "typing-extensions", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "wrapt", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/f5/4e97a17fadd91f77bfdac18523eced22201b5df5bd7c969e9ff8cbda1f51/tensorflow_cpu-2.18.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9f98466fde4a307d39b71309b1a9a8a4f1bb972e70d36b1ead0817405cc518f2", size = 230006617, upload-time = "2024-10-25T00:16:55.903Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/1d/032a9d40762895e51cad06f382135c14d16487a0ad9dcc65aae5bd89c968/tensorflow_cpu-2.18.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:089e71746960ea581dca53401f84b3b99c8537313e337a9e5dbf97036a936f7e", size = 230152077, upload-time = "2024-10-25T00:17:06.143Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/3f/2ed163140237aefa72c761d56af8ba3fa5cb0fe37a9f53b14ad8bcd7ef87/tensorflow_cpu-2.18.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:39bd421ad125e4163d6e2d41ab0e158b583fb5c6f9254522fb87635b0e70b891", size = 230265586, upload-time = "2024-10-25T00:17:17.656Z" },
+    { url = "https://files.pythonhosted.org/packages/44/53/14703a7f769e88e3bbf7a93e218c8e50a0545f07692eb7366c5c11e2fbec/tensorflow_cpu-2.18.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c2dc132be3215f4f8d56766bf8b6645fa6d45dea70b46ae092c5cdd3e958c0ac", size = 230006371, upload-time = "2024-10-25T00:17:26.718Z" },
 ]
 
 [[package]]
